@@ -26,7 +26,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.user = session?.user || null;
 
     // Protect routes
-    if (!session && !event.url.pathname.startsWith('/login')) {
+    if (!session && !event.url.pathname.startsWith('/login') && !event.url.pathname.startsWith('/auth')) {
         return new Response(null, {
             status: 303,
             headers: { location: '/login' },
