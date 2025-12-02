@@ -40,27 +40,33 @@
     let category = "";
     let description = "";
 
-    const fixedExpenseOptions = [
-        "ค่าเช่าห้อง",
-        "ค่าไฟ",
-        "ค่าน้ำ",
-        "ค่าอินเทอร์เน็ต",
-        "ค่าโทรศัพท์",
-        "Netflix",
-        "Spotify",
-        "Youtube Premium",
-        "ค่าส่วนกลาง",
-        "ประกัน",
-        "ผ่อนรถ",
-        "ผ่อนบ้าน",
+    const expenseCategories = [
+        "อาหาร",
+        "เดินทาง",
+        "ของใช้",
+        "ที่พัก",
+        "สุขภาพ",
+        "บันเทิง",
+        "ช้อปปิ้ง",
+        "ค่าอินเตอร์เน็ต",
+        "ค่าเช่าบ้าน",
+        "ค่าชาร์รถ",
+        "ค่าน้ำมัน",
+        "Others",
     ];
 
-    function handleFixedExpenseChange(event: Event) {
-        const select = event.target as HTMLSelectElement;
-        if (select.value) {
-            description = select.value;
-        }
-    }
+    const incomeCategories = [
+        "เงินเดือน",
+        "โบนัส",
+        "ฟรีแลนซ์",
+        "การลงทุน",
+        "ของขวัญ",
+        "เงินคืน",
+        "Others",
+    ];
+
+    $: availableCategories =
+        transactionType === "income" ? incomeCategories : expenseCategories;
 </script>
 
 <div class="max-w-lg mx-auto">
@@ -218,43 +224,10 @@
                 class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
             />
             <datalist id="categories">
-                <option value="อาหาร"></option>
-                <option value="เดินทาง"></option>
-                <option value="ของใช้"></option>
-                <option value="ที่พัก"></option>
-                <option value="สุขภาพ"></option>
-                <option value="บันเทิง"></option>
-                <option value="ช้อปปิ้ง"></option>
-                <option value="การศึกษา"></option>
-                <option value="ลงทุน"></option>
-                <option value="หนี้สิน"></option>
-                <option value="Fixed Expense"></option>
-                <option value="Others"></option>
+                {#each availableCategories as cat}
+                    <option value={cat}></option>
+                {/each}
             </datalist>
-
-            {#if category === "Fixed Expense"}
-                <div
-                    class="mt-2 p-3 bg-indigo-50 rounded-lg border border-indigo-100"
-                >
-                    <label
-                        for="fixed_expense_type"
-                        class="block text-xs font-medium text-indigo-700 mb-1"
-                    >
-                        เลือกรายการ Fixed Expense
-                        (จะใส่ในรายละเอียดให้อัตโนมัติ)
-                    </label>
-                    <select
-                        id="fixed_expense_type"
-                        class="w-full text-sm border-indigo-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500 text-indigo-900"
-                        on:change={handleFixedExpenseChange}
-                    >
-                        <option value="">-- เลือกรายการ --</option>
-                        {#each fixedExpenseOptions as option}
-                            <option value={option}>{option}</option>
-                        {/each}
-                    </select>
-                </div>
-            {/if}
         </div>
 
         <!-- Description -->
