@@ -56,7 +56,8 @@ export const actions: Actions = {
             amount,
             paid_at: paidAt,
             description,
-            category
+            category,
+            is_reimbursed: transactionType === 'income' ? true : undefined
         };
 
         // Handle Multiple File Uploads

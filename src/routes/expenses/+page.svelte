@@ -123,16 +123,18 @@
                             </div>
 
                             <div class="flex items-center gap-1 text-xs">
-                                {#if expense.is_reimbursed}
-                                    <span
-                                        class="text-green-600 flex items-center gap-1"
-                                        ><CheckCircle size={12} /> เคลียร์แล้ว</span
-                                    >
-                                {:else}
-                                    <span
-                                        class="text-red-500 flex items-center gap-1"
-                                        ><XCircle size={12} /> รอเคลียร์</span
-                                    >
+                                {#if expense.transaction_type !== 'income'}
+                                    {#if expense.is_reimbursed}
+                                        <span
+                                            class="text-green-600 flex items-center gap-1"
+                                            ><CheckCircle size={12} /> เคลียร์แล้ว</span
+                                        >
+                                    {:else}
+                                        <span
+                                            class="text-red-500 flex items-center gap-1"
+                                            ><XCircle size={12} /> รอเคลียร์</span
+                                        >
+                                    {/if}
                                 {/if}
                             </div>
                         </div>

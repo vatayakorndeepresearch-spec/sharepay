@@ -199,6 +199,7 @@
                 <option value="สุขภาพ"></option>
                 <option value="บันเทิง"></option>
                 <option value="ช้อปปิ้ง"></option>
+                <option value="Fixed Expense"></option>
                 <option value="Others"></option>
             </datalist>
         </div>

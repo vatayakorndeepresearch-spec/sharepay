@@ -68,7 +68,7 @@ export const actions: Actions = {
             paid_at: paidAt,
             description,
             category,
-            is_reimbursed: transactionType === 'income' ? false : isReimbursed,
+            is_reimbursed: transactionType === 'income' ? true : isReimbursed,
             reimbursed_at: (transactionType === 'expense' && isReimbursed) ? new Date().toISOString() : null,
             reimbursed_by: (transactionType === 'expense' && isReimbursed) ? paidBy : null,
             proof_image_url: proofImageUrl
