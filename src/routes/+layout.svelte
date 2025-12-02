@@ -48,6 +48,17 @@
         <List size={28} />
         <span class="text-xs font-medium">รายการ</span>
       </a>
+
+      <a
+        href="/settings"
+        class="flex flex-col items-center gap-1 py-1 transition {$page.url
+          .pathname === '/settings'
+          ? 'text-indigo-600'
+          : 'text-gray-400 hover:text-gray-600'}"
+      >
+        <Settings size={28} />
+        <span class="text-xs font-medium">ตั้งค่า</span>
+      </a>
     </div>
   </nav>
 </div>

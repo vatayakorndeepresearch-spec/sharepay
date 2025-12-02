@@ -15,6 +15,7 @@
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/kit": "^2.48.5",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
+		"@types/qrcode": "^1.5.6",
 		"autoprefixer": "^10.4.20",
 		"svelte": "^5.43.8",
 		"svelte-check": "^4.3.4",
@@ -27,6 +28,7 @@
 		"@supabase/supabase-js": "^2.86.0",
 		"chart.js": "^4.5.1",
 		"lucide-svelte": "^0.555.0",
+		"qrcode": "^1.5.4",
 		"xlsx": "^0.18.5"
 	}
 }
