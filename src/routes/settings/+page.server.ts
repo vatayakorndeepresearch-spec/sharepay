@@ -18,8 +18,17 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 export const actions: Actions = {
     enroll: async ({ locals: { supabase } }) => {
+        // First, clean up any existing factors (verified or unverified) to prevent collisions
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        if (factors && factors.all) {
+            for (const factor of factors.all) {
+                await supabase.auth.mfa.unenroll({ factorId: factor.id });
+            }
+        }
+
         const { data, error } = await supabase.auth.mfa.enroll({
             factorType: 'totp',
+            friendlyName: 'SharePay',
         });
 
         if (error) {
