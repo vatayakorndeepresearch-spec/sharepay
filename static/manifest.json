@@ -1,6 +1,6 @@
 {
-    "name": "Share Pay",
-    "short_name": "Share Pay",
+    "name": "SharePay",
+    "short_name": "SharePay",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#ffffff",
