@@ -136,4 +136,13 @@
             {/if}
         {/if}
     </div>
+
+    <form method="POST" action="?/logout" use:enhance>
+        <button
+            type="submit"
+            class="w-full flex justify-center items-center gap-2 py-3 px-4 border border-red-200 rounded-xl shadow-sm text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+        >
+            ออกจากระบบ
+        </button>
+    </form>
 </div>

@@ -82,5 +82,10 @@ export const actions: Actions = {
         }
 
         return { success: true };
+    },
+
+    logout: async ({ locals: { supabase } }) => {
+        await supabase.auth.signOut();
+        throw redirect(303, '/login');
     }
 };
