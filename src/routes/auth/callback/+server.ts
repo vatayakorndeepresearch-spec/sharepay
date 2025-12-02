@@ -7,6 +7,14 @@ export const GET = async ({ url, locals: { supabase } }) => {
     if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
+            // Check if user has MFA enabled
+            const { data: factors } = await supabase.auth.mfa.listFactors();
+            const hasVerifiedFactors = factors?.all?.some(f => f.status === 'verified');
+
+            if (hasVerifiedFactors) {
+                throw redirect(303, '/auth/mfa/verify');
+            }
+
             throw redirect(303, next);
         }
     }
