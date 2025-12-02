@@ -42,6 +42,7 @@ export const actions: Actions = {
         const paidAt = formData.get('paid_at') as string;
         const description = formData.get('description') as string;
         const category = (formData.get('category') as string) || 'Others';
+        const notes = formData.get('notes') as string;
         const files = formData.getAll('proof_images') as File[];
         let uploadedUrls: string[] = [];
 

@@ -23,6 +23,7 @@ export const actions: Actions = {
         const paidAt = formData.get('paid_at') as string;
         const description = formData.get('description') as string;
         const category = (formData.get('category') as string) || 'Others';
+        const notes = formData.get('notes') as string; // Added notes
         const isReimbursed = formData.get('is_reimbursed') === 'on';
         const files = formData.getAll('proof_images') as File[];
         let uploadedUrls: string[] = [];
@@ -68,6 +69,7 @@ export const actions: Actions = {
             paid_at: paidAt,
             description,
             category,
+            notes, // Included notes in the insert
             is_reimbursed: transactionType === 'income' ? true : isReimbursed,
             reimbursed_at: (transactionType === 'expense' && isReimbursed) ? new Date().toISOString() : null,
             reimbursed_by: (transactionType === 'expense' && isReimbursed) ? paidBy : null,

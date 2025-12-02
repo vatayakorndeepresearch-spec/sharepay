@@ -249,6 +249,22 @@
             />
         </div>
 
+        <!-- Note -->
+        <div>
+            <label
+                for="notes"
+                class="block text-sm font-medium text-gray-700 mb-1"
+                >หมายเหตุ (ไม่บังคับ)</label
+            >
+            <input
+                type="text"
+                name="notes"
+                id="notes"
+                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="รายละเอียดเพิ่มเติม..."
+            />
+        </div>
+
         <!-- Proof Images -->
         <div>
             <label

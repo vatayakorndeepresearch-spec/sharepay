@@ -43,6 +43,7 @@ export async function GET({ url }) {
         'Type': e.transaction_type === 'income' ? 'Income' : 'Expense',
         'Category': e.category,
         'Description': e.description,
+        'Note': e.notes,
         'Amount': e.amount,
         'Paid By': e.profiles?.display_name,
         'Status': e.transaction_type === 'income' ? '-' : (e.is_reimbursed ? 'Cleared' : 'Waiting')
