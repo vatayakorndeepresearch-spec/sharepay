@@ -1,13 +1,26 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { goto } from "$app/navigation";
     import Chart from "chart.js/auto";
     import { formatCurrency } from "$lib/utils/formatCurrency";
-    import { PieChart, TrendingUp, Award, DollarSign } from "lucide-svelte";
+    import {
+        PieChart,
+        TrendingUp,
+        Award,
+        DollarSign,
+        Filter,
+    } from "lucide-svelte";
 
     export let data;
 
     let pieCanvas: HTMLCanvasElement;
     let barCanvas: HTMLCanvasElement;
+
+    function handleProjectChange(event: Event) {
+        const select = event.target as HTMLSelectElement;
+        const projectId = select.value;
+        goto(`?projectId=${projectId}`);
+    }
 
     onMount(() => {
         if (pieCanvas) {
@@ -38,11 +51,31 @@
     });
 </script>
 
+```html
 <div class="space-y-6 pb-20">
-    <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
-        <PieChart class="text-indigo-600" size={28} />
-        ภาพรวมค่าใช้จ่าย
-    </h1>
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <PieChart class="text-indigo-600" size={28} />
+            ภาพรวมค่าใช้จ่าย
+        </h1>
+    </div>
+
+    <!-- Project Filter -->
+    <div
+        class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center gap-3"
+    >
+        <Filter size={20} class="text-gray-400" />
+        <select
+            class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            value={data.selectedProjectId}
+            on:change={handleProjectChange}
+        >
+            <option value="all">ทุกโปรเจค</option>
+            {#each data.projects as project}
+                <option value={project.id}>{project.name}</option>
+            {/each}
+        </select>
+    </div>
 
     <!-- Summary Cards -->
     <div class="grid grid-cols-2 gap-4">

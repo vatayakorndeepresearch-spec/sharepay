@@ -1,8 +1,17 @@
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals: { supabase } }) => {
-    // Fetch all expenses
-    const { data: expenses, error } = await supabase
+export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
+    const projectId = url.searchParams.get('projectId');
+
+    // Fetch active projects for filter
+    const { data: projects } = await supabase
+        .from('projects')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+    // Build query
+    let query = supabase
         .from('expenses')
         .select(`
             amount,
@@ -12,13 +21,22 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
         `)
         .order('paid_at', { ascending: true });
 
+    // Apply filter if selected
+    if (projectId && projectId !== 'all') {
+        query = query.eq('project_id', projectId);
+    }
+
+    const { data: expenses, error } = await query;
+
     if (error) {
         console.error('Error fetching expenses:', error);
         return {
             categoryData: { labels: [], datasets: [] },
             monthlyData: { labels: [], datasets: [] },
             topSpender: null,
-            totalExpense: 0
+            totalExpense: 0,
+            projects: [],
+            selectedProjectId: 'all'
         };
     }
 
@@ -81,6 +99,8 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
             }]
         },
         topSpender,
-        totalExpense
+        totalExpense,
+        projects: projects || [],
+        selectedProjectId: projectId || 'all'
     };
 };
