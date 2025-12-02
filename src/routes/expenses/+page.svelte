@@ -8,15 +8,15 @@
     export let data;
     $: ({ expenses, projects, filters } = data);
 
-    $: selectedProject = filters?.project || "all";
-    $: selectedStatus = filters?.status || "all";
-    $: selectedType = filters?.type || "all";
+    function handleFilterChange(event: Event) {
+        const select = event.target as HTMLSelectElement;
+        const id = select.id;
+        const value = select.value;
 
-    function applyFilter() {
         const query = new URLSearchParams($page.url.searchParams);
-        query.set("project", selectedProject);
-        query.set("status", selectedStatus);
-        query.set("type", selectedType);
+        query.set(id, value);
+
+        // Reset pagination if needed, but we don't have pagination yet
         goto(`?${query.toString()}`);
     }
 </script>
@@ -26,7 +26,7 @@
         <h1 class="text-2xl font-bold text-gray-800">รายการทั้งหมด</h1>
         <div class="flex gap-2">
             <a
-                href="/expenses/export?project={selectedProject}&status={selectedStatus}&type={selectedType}"
+                href="/expenses/export?project={filters.project}&status={filters.status}&type={filters.type}"
                 class="text-sm bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition flex items-center gap-2"
             >
                 Export Excel
@@ -54,8 +54,8 @@
                 >
                 <select
                     id="type"
-                    bind:value={selectedType}
-                    on:change={applyFilter}
+                    value={filters.type}
+                    on:change={handleFilterChange}
                     class="w-full text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                 >
                     <option value="all">ทั้งหมด</option>
@@ -69,8 +69,8 @@
                 >
                 <select
                     id="project"
-                    bind:value={selectedProject}
-                    on:change={applyFilter}
+                    value={filters.project}
+                    on:change={handleFilterChange}
                     class="w-full text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                 >
                     <option value="all">ทั้งหมด</option>
@@ -85,8 +85,8 @@
                 >
                 <select
                     id="status"
-                    bind:value={selectedStatus}
-                    on:change={applyFilter}
+                    value={filters.status}
+                    on:change={handleFilterChange}
                     class="w-full text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                 >
                     <option value="all">ทั้งหมด</option>
