@@ -108,29 +108,34 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
                 }
             });
 
-            const totalPaid = Object.values(paidMap).reduce((a, b) => a + b, 0);
-            const sharePerPerson = totalPaid / 2;
+            // Calculate Net Balance (Full difference, no division as per user request)
+            // User requested: "ไม่ต้องหาร คิดจำนวนเต็ม" (Don't divide, use full number)
+            // This means we just compare who paid more and by how much.
+            // Note: This implies the "debt" is the full difference, which mathematically
+            // might mean they are settling to a state where one person paid everything?
+            // Or simply they want to see the "gap" between them.
 
-            // Calculate Net
             const p1 = profiles[0];
             const p2 = profiles[1];
 
-            const p1_net = paidMap[p1.id] - sharePerPerson;
-            // const p2_net = paidMap[p2.id] - sharePerPerson;
+            const p1_paid = paidMap[p1.id];
+            const p2_paid = paidMap[p2.id];
 
-            if (p1_net > 0) {
-                // P1 paid more, P2 owes P1
+            const diff = p1_paid - p2_paid;
+
+            if (diff > 0) {
+                // P1 paid more
                 netBalance = {
                     debtor: p2.display_name,
                     creditor: p1.display_name,
-                    amount: p1_net
+                    amount: diff
                 };
-            } else if (p1_net < 0) {
-                // P1 paid less, P1 owes P2
+            } else if (diff < 0) {
+                // P2 paid more
                 netBalance = {
                     debtor: p1.display_name,
                     creditor: p2.display_name,
-                    amount: Math.abs(p1_net)
+                    amount: Math.abs(diff)
                 };
             }
         }
