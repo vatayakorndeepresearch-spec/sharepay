@@ -10,24 +10,34 @@
 
     $: selectedProject = filters?.project || "all";
     $: selectedStatus = filters?.status || "all";
+    $: selectedType = filters?.type || "all";
 
     function applyFilter() {
         const query = new URLSearchParams($page.url.searchParams);
         query.set("project", selectedProject);
         query.set("status", selectedStatus);
+        query.set("type", selectedType);
         goto(`?${query.toString()}`);
     }
 </script>
 
 <div class="space-y-4">
-    <div class="flex justify-between items-center">
+    <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold text-gray-800">รายการทั้งหมด</h1>
-        <a
-            href="/expenses/new"
-            class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm text-sm"
-        >
-            + เพิ่ม
-        </a>
+        <div class="flex gap-2">
+            <a
+                href="/expenses/export?project={selectedProject}&status={selectedStatus}&type={selectedType}"
+                class="text-sm bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+            >
+                Export Excel
+            </a>
+            <a
+                href="/expenses/new"
+                class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm text-sm flex items-center"
+            >
+                + เพิ่ม
+            </a>
+        </div>
     </div>
 
     <!-- Filters -->
@@ -37,7 +47,22 @@
         <div class="flex items-center gap-2 text-gray-700 font-medium text-sm">
             <Filter size={16} /> ตัวกรอง
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-3 gap-3">
+            <div>
+                <label for="type" class="block text-xs text-gray-500 mb-1"
+                    >ประเภท</label
+                >
+                <select
+                    id="type"
+                    bind:value={selectedType}
+                    on:change={applyFilter}
+                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                    <option value="all">ทั้งหมด</option>
+                    <option value="income">รายรับ</option>
+                    <option value="expense">รายจ่าย</option>
+                </select>
+            </div>
             <div>
                 <label for="project" class="block text-xs text-gray-500 mb-1"
                     >โปรเจค</label
@@ -123,7 +148,7 @@
                             </div>
 
                             <div class="flex items-center gap-1 text-xs">
-                                {#if expense.transaction_type !== 'income'}
+                                {#if expense.transaction_type !== "income"}
                                     {#if expense.is_reimbursed}
                                         <span
                                             class="text-green-600 flex items-center gap-1"
