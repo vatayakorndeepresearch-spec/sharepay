@@ -1,7 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { page } from "$app/stores";
-  import { Home, PlusCircle, List, Settings } from "lucide-svelte";
+  import { Home, PlusCircle, List, Settings, PieChart } from "lucide-svelte";
 </script>
 
 <div class="min-h-screen bg-gray-50 text-gray-900 font-sans pb-20">
@@ -24,6 +24,17 @@
       >
         <Home size={28} />
         <span class="text-xs font-medium">หน้าแรก</span>
+      </a>
+
+      <a
+        href="/stats"
+        class="flex flex-col items-center gap-1 py-1 transition {$page.url
+          .pathname === '/stats'
+          ? 'text-indigo-600'
+          : 'text-gray-400 hover:text-gray-600'}"
+      >
+        <PieChart size={28} />
+        <span class="text-xs font-medium">สถิติ</span>
       </a>
 
       <a
