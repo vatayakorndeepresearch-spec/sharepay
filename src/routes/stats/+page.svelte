@@ -15,6 +15,8 @@
 
     let pieCanvas: HTMLCanvasElement;
     let barCanvas: HTMLCanvasElement;
+    let pieChart: Chart;
+    let barChart: Chart;
 
     function handleProjectChange(event: Event) {
         const select = event.target as HTMLSelectElement;
@@ -22,36 +24,35 @@
         goto(`?projectId=${projectId}`);
     }
 
-    onMount(() => {
-        if (pieCanvas) {
-            new Chart(pieCanvas, {
-                type: "doughnut",
-                data: data.categoryData,
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: "bottom" },
-                    },
+    $: if (pieCanvas && data.categoryData) {
+        if (pieChart) pieChart.destroy();
+        pieChart = new Chart(pieCanvas, {
+            type: "doughnut",
+            data: data.categoryData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: "bottom" },
                 },
-            });
-        }
+            },
+        });
+    }
 
-        if (barCanvas) {
-            new Chart(barCanvas, {
-                type: "bar",
-                data: data.monthlyData,
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true },
-                    },
+    $: if (barCanvas && data.monthlyData) {
+        if (barChart) barChart.destroy();
+        barChart = new Chart(barCanvas, {
+            type: "bar",
+            data: data.monthlyData,
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true },
                 },
-            });
-        }
-    });
+            },
+        });
+    }
 </script>
 
-```html
 <div class="space-y-6 pb-20">
     <div class="flex justify-between items-center">
         <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
