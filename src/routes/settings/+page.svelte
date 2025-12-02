@@ -118,6 +118,14 @@
                 </div>
             {:else}
                 <form method="POST" action="?/enroll" use:enhance>
+                    {#if form?.error}
+                        <div
+                            class="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4 flex items-center gap-2"
+                        >
+                            <AlertTriangle size={16} />
+                            {form.error}
+                        </div>
+                    {/if}
                     <button
                         type="submit"
                         class="w-full flex justify-center items-center gap-2 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
