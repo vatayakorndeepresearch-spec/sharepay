@@ -73,9 +73,14 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
     }
 
     // Calculate Net Balance (Who owes whom)
+    // Calculate Net Balance (Who owes whom)
     // Assumption: All expenses are split 50/50 between 2 people (พี่, น้อง)
     // We need to find the 2 profiles first
-    const { data: profiles } = await supabase.from('profiles').select('id, display_name');
+    const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .order('created_at', { ascending: true })
+        .limit(2);
 
     let netBalance = {
         debtor: null as string | null, // Who owes
@@ -83,7 +88,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
         amount: 0
     };
 
-    if (profiles && profiles.length === 2) {
+    if (profiles && profiles.length >= 2) {
         // Calculate total paid by each person (only for UNREIMBURSED expenses)
         // Actually, we should look at ALL expenses that are NOT reimbursed yet.
         // If it is reimbursed, it's settled.
