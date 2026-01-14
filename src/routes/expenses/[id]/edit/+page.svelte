@@ -35,9 +35,6 @@
         }
     }
 
-    let category = data.expense.category || "Others";
-    let description = data.expense.description;
-
     const expenseCategories = [
         "อาหาร",
         "เดินทาง",
@@ -51,7 +48,6 @@
         "ค่าชาร์รถ",
         "ค่าน้ำมัน",
         "เงินเดือน",
-        "Others",
     ];
 
     const incomeCategories = [
@@ -61,8 +57,27 @@
         "การลงทุน",
         "ของขวัญ",
         "เงินคืน",
-        "Others",
     ];
+
+    let category = data.expense.category || "Others";
+    let customCategory = "";
+    let isCustomCategory = false;
+    let description = data.expense.description;
+
+    // Check if existing category is not in the predefined list
+    $: {
+        const currentCategories =
+            transactionType === "income" ? incomeCategories : expenseCategories;
+        if (
+            category &&
+            !currentCategories.includes(category) &&
+            category !== "custom"
+        ) {
+            isCustomCategory = true;
+            customCategory = category;
+            category = "custom";
+        }
+    }
 
     $: availableCategories =
         transactionType === "income" ? incomeCategories : expenseCategories;
@@ -224,20 +239,41 @@
                 class="block text-sm font-medium text-gray-700 mb-1"
                 >หมวดหมู่</label
             >
-            <input
-                type="text"
-                name="category"
-                id="category"
-                list="categories"
+            <select
+                id="category-select"
                 bind:value={category}
-                placeholder="เลือกหรือพิมพ์เอง (เช่น อาหาร, เดินทาง)"
+                on:change={(e) => {
+                    if (e.currentTarget.value === "custom") {
+                        isCustomCategory = true;
+                    } else {
+                        isCustomCategory = false;
+                        customCategory = "";
+                    }
+                }}
                 class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <datalist id="categories">
+            >
+                <option value="">-- เลือกหมวดหมู่ --</option>
                 {#each availableCategories as cat}
-                    <option value={cat}></option>
+                    <option value={cat}>{cat}</option>
                 {/each}
-            </datalist>
+                <option value="custom">➕ อื่นๆ (พิมพ์เอง)</option>
+            </select>
+
+            {#if isCustomCategory}
+                <input
+                    type="text"
+                    bind:value={customCategory}
+                    placeholder="พิมพ์หมวดหมู่ใหม่..."
+                    class="w-full mt-2 border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            {/if}
+
+            <!-- Hidden input to submit actual category value -->
+            <input
+                type="hidden"
+                name="category"
+                value={isCustomCategory ? customCategory : category}
+            />
         </div>
 
         <!-- Description -->
