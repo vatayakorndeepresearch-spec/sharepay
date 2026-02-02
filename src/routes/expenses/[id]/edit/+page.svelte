@@ -6,21 +6,155 @@
         ArrowDownLeft,
         ArrowLeft,
         Trash2,
+        ScanLine,
     } from "lucide-svelte";
+    import { createWorker } from "tesseract.js";
 
     export let data;
     export let form;
 
     let loading = false;
+    let scanning = false;
     let transactionType = data.expense.transaction_type || "expense";
     let previewUrls: string[] = [];
+
+    // Local bindings for form fields to allow programmatic updates
+    let amount = data.expense.amount;
+    let notes = data.expense.notes || "";
+    let paidAt = data.expense.paid_at;
+
+    async function processOCR(file: File) {
+        scanning = true;
+        try {
+            const worker = await createWorker("tha+eng");
+            const {
+                data: { text },
+            } = await worker.recognize(file);
+            console.log("OCR Raw Text:", text);
+
+            const lines = text.split("\n");
+
+            // --- 1. Extract Amount ---
+            let extractedAmount = null;
+            const amountLineRegex =
+                /(?:จำนวน|amount)\s*[:.]?\s*([\d,]+\.\d{2})/i;
+
+            for (let line of lines) {
+                const match = line.match(amountLineRegex);
+                if (match) {
+                    extractedAmount = parseFloat(match[1].replace(/,/g, ""));
+                    break;
+                }
+            }
+
+            if (!extractedAmount) {
+                const strictCurrency = text.match(
+                    /([\d,]+\.\d{2})\s*(?:THB|บาท)/i,
+                );
+                if (strictCurrency) {
+                    extractedAmount = parseFloat(
+                        strictCurrency[1].replace(/,/g, ""),
+                    );
+                }
+            }
+
+            if (extractedAmount && !isNaN(extractedAmount)) {
+                amount = extractedAmount;
+            }
+
+            // --- 2. Extract Date/Time ---
+            const thaiDateRegex =
+                /(\d{1,2})\s+(ม\.?ค\.?|ก\.?พ\.?|มี\.?ค\.?|เม\.?ย\.?|พ\.?ค\.?|มิ\.?ย\.?|ก\.?ค\.?|ส\.?ค\.?|ก\.?ย\.?|ต\.?ค\.?|พ\.?ย\.?|ธ\.?ค\.?)\s+(\d{2})/;
+
+            for (let line of lines) {
+                const match = line.match(thaiDateRegex);
+                if (match) {
+                    const d = parseInt(match[1]);
+                    const mStr = match[2].replace(/\./g, "");
+                    const y = parseInt(match[3]);
+
+                    const monthMap: Record<string, number> = {
+                        มค: 0,
+                        กพ: 1,
+                        มีค: 2,
+                        เมย: 3,
+                        พค: 4,
+                        มิย: 5,
+                        กค: 6,
+                        สค: 7,
+                        กย: 8,
+                        ตค: 9,
+                        พย: 10,
+                        ธค: 11,
+                    };
+
+                    const normalizedMonth = mStr.replace(/\./g, "");
+                    const monthIndex = monthMap[normalizedMonth];
+
+                    if (monthIndex !== undefined) {
+                        let fullYear = 2000;
+                        if (y > 2500) {
+                            fullYear = y - 543;
+                        } else {
+                            fullYear = y + 2500 - 543;
+                        }
+
+                        const pad = (n: number) => String(n).padStart(2, "0");
+                        paidAt = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
+                    }
+                    break;
+                }
+            }
+
+            // --- 3. Extract Note/Memo ---
+            let extractedNote = "";
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.match(/(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)/i)) {
+                    let content = line
+                        .replace(
+                            /.*(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)\s*[:.]?\s*/i,
+                            "",
+                        )
+                        .trim();
+
+                    if (!content && i + 1 < lines.length) {
+                        content = lines[i + 1].trim();
+                    }
+
+                    if (content) {
+                        extractedNote = content;
+                    }
+                    break;
+                }
+            }
+
+            if (extractedNote) {
+                notes = extractedNote;
+                description = extractedNote; // Map Memo to Description
+            }
+
+            await worker.terminate();
+        } catch (err) {
+            console.error("OCR Error:", err);
+        } finally {
+            scanning = false;
+        }
+    }
 
     function handleFileChange(event: Event) {
         const input = event.target as HTMLInputElement;
         previewUrls = [];
 
         if (input.files && input.files.length > 0) {
-            Array.from(input.files).forEach((file) => {
+            const files = Array.from(input.files);
+
+            // Run OCR on the first file if it exists
+            if (files[0]) {
+                processOCR(files[0]);
+            }
+
+            files.forEach((file) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     if (e.target?.result) {
@@ -184,8 +318,10 @@
                 name="paid_at"
                 id="paid_at"
                 required
-                value={data.expense.paid_at}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                bind:value={paidAt}
+                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
+                    ? 'bg-indigo-50 animate-pulse'
+                    : ''}"
             />
         </div>
 
@@ -226,8 +362,10 @@
                 required
                 min="0"
                 step="0.01"
-                value={data.expense.amount}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                bind:value={amount}
+                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
+                    ? 'bg-indigo-50 animate-pulse'
+                    : ''}"
                 placeholder="0.00"
             />
         </div>
@@ -305,8 +443,10 @@
                 type="text"
                 name="notes"
                 id="notes"
-                value={data.expense.notes || ""}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                bind:value={notes}
+                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
+                    ? 'bg-indigo-50 animate-pulse'
+                    : ''}"
                 placeholder="รายละเอียดเพิ่มเติม..."
             />
         </div>
@@ -330,6 +470,13 @@
             <p class="mt-1 text-xs text-gray-500">
                 PNG, JPG ไม่เกิน 5MB ต่อรูป
             </p>
+            {#if scanning}
+                <div
+                    class="mt-2 text-indigo-600 flex items-center gap-2 text-sm"
+                >
+                    <ScanLine class="animate-spin" size={16} /> กำลังอ่านข้อมูลจากสลิป...
+                </div>
+            {/if}
 
             <!-- New Previews -->
             {#if previewUrls.length > 0}

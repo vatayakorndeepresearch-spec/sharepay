@@ -1,28 +1,216 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import { Loader2, ArrowUpRight, ArrowDownLeft } from "lucide-svelte";
+    import {
+        Loader2,
+        ArrowUpRight,
+        ArrowDownLeft,
+        ScanLine,
+    } from "lucide-svelte";
+    import { createWorker } from "tesseract.js";
 
     export let data;
     export let form;
 
     let loading = false;
+    let scanning = false;
     let transactionType = "expense"; // 'expense' | 'income'
 
+    // Default to today (Local Time)
     // Default to today (Local Time)
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const day = String(now.getDate()).padStart(2, "0");
-    const today = `${year}-${month}-${day}`;
+
+    // Bindable date variable
+    let paidAt = `${year}-${month}-${day}`;
 
     let previewUrls: string[] = [];
+
+    // Local bindings
+    let amount: number | null = null;
+    let notes = "";
+    let description = "";
+
+    async function processOCR(file: File) {
+        scanning = true;
+        try {
+            const worker = await createWorker("tha+eng");
+            const {
+                data: { text },
+            } = await worker.recognize(file);
+            console.log("OCR Raw Text:", text);
+
+            const lines = text.split("\n");
+
+            // --- 1. Extract Amount (Priority: "จำนวน:" or just finding currency) ---
+            let extractedAmount = null;
+            // Pattern: จำนวน: 1,000.00 บาท
+            const amountLineRegex =
+                /(?:จำนวน|amount)\s*[:.]?\s*([\d,]+\.\d{2})/i;
+
+            for (let line of lines) {
+                const match = line.match(amountLineRegex);
+                if (match) {
+                    extractedAmount = parseFloat(match[1].replace(/,/g, ""));
+                    break;
+                }
+            }
+
+            // Fallback: Just look for currency with THB/บาท pattern if label is missing
+            if (!extractedAmount) {
+                const strictCurrency = text.match(
+                    /([\d,]+\.\d{2})\s*(?:THB|บาท)/i,
+                );
+                if (strictCurrency) {
+                    extractedAmount = parseFloat(
+                        strictCurrency[1].replace(/,/g, ""),
+                    );
+                }
+            }
+
+            if (extractedAmount && !isNaN(extractedAmount)) {
+                amount = extractedAmount;
+            }
+
+            // --- 2. Extract Date/Time (Priority: Thai/K-Plus format) ---
+            // Pattern: 31 ธ.ค. 68 or 31ธ.ค.68
+            const thaiDateRegex =
+                /(\d{1,2})\s*([ก-๙]+\.?\s*[ก-๙]+\.?|[a-zA-Z.]+)\s*(\d{2,4})/;
+
+            for (let line of lines) {
+                const match = line.match(thaiDateRegex);
+                if (match) {
+                    const d = parseInt(match[1]); // Day
+                    const mStr = match[2]; // Month part
+                    const y = parseInt(match[3]); // Year
+
+                    // Normalize month string (remove dots, trim, spaces)
+                    const normalizedMonth = mStr.replace(/[\.\s]/g, "");
+
+                    const monthMap: Record<string, number> = {
+                        มค: 0,
+                        กพ: 1,
+                        มีค: 2,
+                        เมย: 3,
+                        พค: 4,
+                        มิย: 5,
+                        กค: 6,
+                        สค: 7,
+                        กย: 8,
+                        ตค: 9,
+                        พย: 10,
+                        ธค: 11,
+                        jan: 0,
+                        feb: 1,
+                        mar: 2,
+                        apr: 3,
+                        may: 4,
+                        jun: 5,
+                        jul: 6,
+                        aug: 7,
+                        sep: 8,
+                        oct: 9,
+                        nov: 10,
+                        dec: 11,
+                    };
+
+                    // Try direct match or partial match
+                    let monthIndex = monthMap[normalizedMonth];
+
+                    // If not found, try to find if the string contains any of the keys
+                    if (monthIndex === undefined) {
+                        for (const key in monthMap) {
+                            if (normalizedMonth.includes(key)) {
+                                monthIndex = monthMap[key];
+                                break;
+                            }
+                        }
+                    }
+
+                    if (monthIndex !== undefined) {
+                        let fullYear = 2000;
+                        if (y > 2500) {
+                            // BE Full
+                            fullYear = y - 543;
+                        } else if (y > 2000) {
+                            // AD Full
+                            fullYear = y;
+                        } else {
+                            // Short Year
+                            // If > 50, likely BE short (68 -> 2568 -> 2025)
+                            // If < 50, likely AD short (25 -> 2025)
+                            if (y > 50) {
+                                fullYear = y + 2500 - 543;
+                            } else {
+                                fullYear = 2000 + y;
+                            }
+                        }
+
+                        const pad = (n: number) => String(n).padStart(2, "0");
+                        paidAt = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
+                    }
+                    break;
+                }
+            }
+
+            // --- 3. Extract Note/Memo (Priority: "บันทึกช่วยจำ") ---
+            let extractedNote = "";
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.match(/(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)/i)) {
+                    // Start extracting from this line (after label)
+                    // Sometimes the content is on the same line, sometimes next line(s)
+                    let content = line
+                        .replace(
+                            /.*(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)\s*[:.]?\s*/i,
+                            "",
+                        )
+                        .trim();
+
+                    // If empty on this line, check next line
+                    if (!content && i + 1 < lines.length) {
+                        content = lines[i + 1].trim();
+                    } else if (content) {
+                        // If has content, maybe it continues to next line? (Optional)
+                    }
+
+                    if (content) {
+                        extractedNote = content;
+                    }
+                    break;
+                }
+            }
+
+            if (extractedNote) {
+                // Remove redundant prefix if any
+                notes = extractedNote;
+                description = extractedNote; // Map Memo to Description
+            } else {
+                // Fallback: description from first line or specific keywords if needed?
+                // For now, keep it empty if not found.
+            }
+
+            await worker.terminate();
+        } catch (err) {
+            console.error("OCR Error:", err);
+        } finally {
+            scanning = false;
+        }
+    }
 
     function handleFileChange(event: Event) {
         const input = event.target as HTMLInputElement;
         previewUrls = [];
 
         if (input.files && input.files.length > 0) {
-            Array.from(input.files).forEach((file) => {
+            const files = Array.from(input.files);
+
+            if (files[0]) {
+                processOCR(files[0]);
+            }
+
+            files.forEach((file) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     if (e.target?.result) {
@@ -40,7 +228,6 @@
     let category = "";
     let customCategory = "";
     let isCustomCategory = false;
-    let description = "";
 
     const expenseCategories = [
         "อาหาร",
@@ -162,8 +349,10 @@
                 name="paid_at"
                 id="paid_at"
                 required
-                value={today}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                bind:value={paidAt}
+                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
+                    ? 'bg-indigo-50 animate-pulse'
+                    : ''}"
             />
         </div>
 
@@ -203,7 +392,10 @@
                 required
                 min="0"
                 step="0.01"
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                bind:value={amount}
+                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
+                    ? 'bg-indigo-50 animate-pulse'
+                    : ''}"
                 placeholder="0.00"
             />
         </div>
@@ -281,7 +473,10 @@
                 type="text"
                 name="notes"
                 id="notes"
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                bind:value={notes}
+                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
+                    ? 'bg-indigo-50 animate-pulse'
+                    : ''}"
                 placeholder="รายละเอียดเพิ่มเติม..."
             />
         </div>
@@ -305,6 +500,13 @@
             <p class="mt-1 text-xs text-gray-500">
                 PNG, JPG ไม่เกิน 5MB ต่อรูป
             </p>
+            {#if scanning}
+                <div
+                    class="mt-2 text-indigo-600 flex items-center gap-2 text-sm"
+                >
+                    <ScanLine class="animate-spin" size={16} /> กำลังอ่านข้อมูลจากสลิป...
+                </div>
+            {/if}
 
             {#if previewUrls.length > 0}
                 <div class="mt-2 grid grid-cols-3 gap-2">
