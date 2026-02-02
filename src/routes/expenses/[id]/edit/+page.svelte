@@ -62,16 +62,21 @@
                 amount = extractedAmount;
             }
 
-            // --- 2. Extract Date/Time ---
+            // --- 2. Extract Date/Time (Priority: Thai/K-Plus format) ---
+            // Pattern: 31 ธ.ค. 68 or 31ธ.ค.68 or 31 Dec 2025
             const thaiDateRegex =
-                /(\d{1,2})\s+(ม\.?ค\.?|ก\.?พ\.?|มี\.?ค\.?|เม\.?ย\.?|พ\.?ค\.?|มิ\.?ย\.?|ก\.?ค\.?|ส\.?ค\.?|ก\.?ย\.?|ต\.?ค\.?|พ\.?ย\.?|ธ\.?ค\.?)\s+(\d{2})/;
+                /(\d{1,2})\s*([ก-๙\.\s]{2,}|[a-zA-Z]{3,}\.?)\s*(\d{2,4})/;
 
+            let foundDate = false;
             for (let line of lines) {
                 const match = line.match(thaiDateRegex);
                 if (match) {
-                    const d = parseInt(match[1]);
-                    const mStr = match[2].replace(/\./g, "");
-                    const y = parseInt(match[3]);
+                    const d = parseInt(match[1]); // Day
+                    const mStr = match[2].toLowerCase(); // Month part
+                    const y = parseInt(match[3]); // Year
+
+                    // Normalize month string (remove dots, trim, spaces)
+                    const normalizedMonth = mStr.replace(/[\.\s]/g, "");
 
                     const monthMap: Record<string, number> = {
                         มค: 0,
@@ -86,23 +91,96 @@
                         ตค: 9,
                         พย: 10,
                         ธค: 11,
+                        มกราคม: 0,
+                        กุมภาพันธ์: 1,
+                        มีนาคม: 2,
+                        เมษายน: 3,
+                        พฤษภาคม: 4,
+                        มิถุนายน: 5,
+                        กรกฎาคม: 6,
+                        สิงหาคม: 7,
+                        กันยายน: 8,
+                        ตุลาคม: 9,
+                        พฤศจิกายน: 10,
+                        ธันวาคม: 11,
+                        jan: 0,
+                        feb: 1,
+                        mar: 2,
+                        apr: 3,
+                        may: 4,
+                        jun: 5,
+                        jul: 6,
+                        aug: 7,
+                        sep: 8,
+                        oct: 9,
+                        nov: 10,
+                        dec: 11,
+                        january: 0,
+                        february: 1,
+                        march: 2,
+                        april: 3,
+                        june: 5,
+                        july: 6,
+                        august: 7,
+                        september: 8,
+                        october: 9,
+                        november: 10,
+                        december: 11,
                     };
 
-                    const normalizedMonth = mStr.replace(/\./g, "");
-                    const monthIndex = monthMap[normalizedMonth];
+                    // Try direct match or partial match
+                    let monthIndex = monthMap[normalizedMonth];
+
+                    // If not found, try to find if any key is contained in normalizedMonth
+                    if (monthIndex === undefined) {
+                        for (const key in monthMap) {
+                            if (normalizedMonth.includes(key)) {
+                                monthIndex = monthMap[key];
+                                break;
+                            }
+                        }
+                    }
 
                     if (monthIndex !== undefined) {
                         let fullYear = 2000;
                         if (y > 2500) {
+                            // BE Full
                             fullYear = y - 543;
+                        } else if (y >= 2000) {
+                            // AD Full
+                            fullYear = y;
                         } else {
-                            fullYear = y + 2500 - 543;
+                            // Short Year
+                            // If > 50, likely BE short (68 -> 2568 -> 2025)
+                            // If < 50, likely AD short (25 -> 2025)
+                            if (y > 50) {
+                                fullYear = 2500 + y - 543;
+                            } else {
+                                fullYear = 2000 + y;
+                            }
                         }
 
-                        const pad = (n: number) => String(n).padStart(2, "0");
-                        paidAt = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
+                        // Validate date components
+                        if (
+                            d >= 1 &&
+                            d <= 31 &&
+                            monthIndex >= 0 &&
+                            monthIndex <= 11
+                        ) {
+                            const pad = (n: number) =>
+                                String(n).padStart(2, "0");
+                            const newDate = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
+                            console.log(
+                                "OCR Extracted Date:",
+                                newDate,
+                                "from line:",
+                                line,
+                            );
+                            paidAt = newDate;
+                            foundDate = true;
+                        }
                     }
-                    break;
+                    if (foundDate) break;
                 }
             }
 

@@ -74,15 +74,16 @@
             }
 
             // --- 2. Extract Date/Time (Priority: Thai/K-Plus format) ---
-            // Pattern: 31 ธ.ค. 68 or 31ธ.ค.68
+            // Pattern: 31 ธ.ค. 68 or 31ธ.ค.68 or 31 Dec 2025
             const thaiDateRegex =
-                /(\d{1,2})\s*([ก-๙]+\.?\s*[ก-๙]+\.?|[a-zA-Z.]+)\s*(\d{2,4})/;
+                /(\d{1,2})\s*([ก-๙\.\s]{2,}|[a-zA-Z]{3,}\.?)\s*(\d{2,4})/;
 
+            let foundDate = false;
             for (let line of lines) {
                 const match = line.match(thaiDateRegex);
                 if (match) {
                     const d = parseInt(match[1]); // Day
-                    const mStr = match[2]; // Month part
+                    const mStr = match[2].toLowerCase(); // Month part
                     const y = parseInt(match[3]); // Year
 
                     // Normalize month string (remove dots, trim, spaces)
@@ -101,6 +102,18 @@
                         ตค: 9,
                         พย: 10,
                         ธค: 11,
+                        มกราคม: 0,
+                        กุมภาพันธ์: 1,
+                        มีนาคม: 2,
+                        เมษายน: 3,
+                        พฤษภาคม: 4,
+                        มิถุนายน: 5,
+                        กรกฎาคม: 6,
+                        สิงหาคม: 7,
+                        กันยายน: 8,
+                        ตุลาคม: 9,
+                        พฤศจิกายน: 10,
+                        ธันวาคม: 11,
                         jan: 0,
                         feb: 1,
                         mar: 2,
@@ -113,12 +126,23 @@
                         oct: 9,
                         nov: 10,
                         dec: 11,
+                        january: 0,
+                        february: 1,
+                        march: 2,
+                        april: 3,
+                        june: 5,
+                        july: 6,
+                        august: 7,
+                        september: 8,
+                        october: 9,
+                        november: 10,
+                        december: 11,
                     };
 
                     // Try direct match or partial match
                     let monthIndex = monthMap[normalizedMonth];
 
-                    // If not found, try to find if the string contains any of the keys
+                    // If not found, try to find if any key is contained in normalizedMonth
                     if (monthIndex === undefined) {
                         for (const key in monthMap) {
                             if (normalizedMonth.includes(key)) {
@@ -133,7 +157,7 @@
                         if (y > 2500) {
                             // BE Full
                             fullYear = y - 543;
-                        } else if (y > 2000) {
+                        } else if (y >= 2000) {
                             // AD Full
                             fullYear = y;
                         } else {
@@ -141,16 +165,33 @@
                             // If > 50, likely BE short (68 -> 2568 -> 2025)
                             // If < 50, likely AD short (25 -> 2025)
                             if (y > 50) {
-                                fullYear = y + 2500 - 543;
+                                fullYear = 2500 + y - 543;
                             } else {
                                 fullYear = 2000 + y;
                             }
                         }
 
-                        const pad = (n: number) => String(n).padStart(2, "0");
-                        paidAt = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
+                        // Validate date components
+                        if (
+                            d >= 1 &&
+                            d <= 31 &&
+                            monthIndex >= 0 &&
+                            monthIndex <= 11
+                        ) {
+                            const pad = (n: number) =>
+                                String(n).padStart(2, "0");
+                            const newDate = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
+                            console.log(
+                                "OCR Extracted Date:",
+                                newDate,
+                                "from line:",
+                                line,
+                            );
+                            paidAt = newDate;
+                            foundDate = true;
+                        }
                     }
-                    break;
+                    if (foundDate) break;
                 }
             }
 
