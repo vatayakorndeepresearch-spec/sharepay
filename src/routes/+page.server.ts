@@ -103,14 +103,14 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
             profiles.forEach(p => paidMap[p.id] = 0);
 
             unpaidExpenses.forEach(item => {
+                // Only count expenses for net balance calculation
+                // Income is money coming IN to the project, not "paid out" by anyone
+                // Net balance should only consider: who paid MORE expenses out of pocket
                 if (item.transaction_type === 'expense') {
                     paidMap[item.paid_by] += item.amount;
-                } else {
-                    // Income: If A receives 100, A "owes" B 50.
-                    // So it's like A paid -100 (deficit).
-                    // Or simpler: Treat Income as negative expense.
-                    paidMap[item.paid_by] -= item.amount;
                 }
+                // Note: Income transactions are intentionally NOT counted here
+                // because they represent money received, not money spent
             });
 
             // Calculate Net Balance (Full difference, no division as per user request)
