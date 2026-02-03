@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
         return {
             categoryData: { labels: [], datasets: [] },
             monthlyData: { labels: [], datasets: [] },
-            topSpender: null,
+            topSpender: { name: '-', amount: 0 },
             totalExpense: 0,
             projects: [],
             selectedProjectId: 'all'
@@ -65,7 +65,9 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
     // 3. Top Spender
     const spenderMap = new Map<string, number>();
     expenses.forEach(e => {
-        const name = e.paid_by?.display_name || 'Unknown';
+        // Handle paid_by being either an object or an array depending on Supabase type inference
+        const paidBy = Array.isArray(e.paid_by) ? e.paid_by[0] : e.paid_by;
+        const name = paidBy?.display_name || 'Unknown';
         const current = spenderMap.get(name) || 0;
         spenderMap.set(name, current + Number(e.amount));
     });

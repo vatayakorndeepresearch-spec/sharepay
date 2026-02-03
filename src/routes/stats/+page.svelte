@@ -163,10 +163,10 @@
             <div
                 class="text-xl font-black font-display text-slate-900 truncate tracking-tight"
             >
-                {data.topSpender.name}
+                {data.topSpender?.name || "-"}
             </div>
             <div class="text-xs font-bold text-slate-400 mt-1">
-                {formatCurrency(data.topSpender.amount)}
+                {formatCurrency(data.topSpender?.amount || 0)}
             </div>
         </div>
     </div>
