@@ -11,6 +11,7 @@
         Upload,
         AlertCircle,
         X,
+        Save,
     } from "lucide-svelte";
     import { createWorker } from "tesseract.js";
     import { onMount } from "svelte";
@@ -312,18 +313,36 @@
             </h1>
         </div>
 
-        <label
-            class="cursor-pointer bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm text-sm flex items-center gap-2"
-        >
-            <Plus size={18} /> เพิ่มสลิป
-            <input
-                type="file"
-                multiple
-                accept="image/*"
-                class="hidden"
-                on:change={handleFileChange}
-            />
-        </label>
+        <div class="flex items-center gap-2">
+            {#if items.length > 0}
+                <button
+                    type="submit"
+                    form="bulk-save-form"
+                    disabled={loading || isProcessing}
+                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm text-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                    {#if loading}
+                        <Loader2 class="animate-spin" size={18} />
+                    {:else}
+                        <Save size={18} />
+                    {/if}
+                    บันทึก
+                </button>
+            {/if}
+
+            <label
+                class="cursor-pointer bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition shadow-sm text-sm flex items-center gap-2"
+            >
+                <Plus size={18} /> เพิ่มสลิป
+                <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    class="hidden"
+                    on:change={handleFileChange}
+                />
+            </label>
+        </div>
     </div>
 
     {#if form?.error}
@@ -363,6 +382,7 @@
         </div>
     {:else}
         <form
+            id="bulk-save-form"
             method="POST"
             action="?/batchSave"
             enctype="multipart/form-data"
