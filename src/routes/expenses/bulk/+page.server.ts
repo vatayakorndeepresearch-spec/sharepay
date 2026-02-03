@@ -44,7 +44,10 @@ export const actions: Actions = {
                 const notes = formData.get(`item_${i}_notes`) as string || '';
                 const file = formData.get(`item_${i}_file`) as File;
 
-                console.log(`Processing item ${i}:`, { projectId, transactionType, paidBy, amount, paidAt, description, category });
+                console.log(`Processing item ${i}:`, {
+                    projectId, transactionType, paidBy, amount, paidAt, description, category,
+                    file: file ? { name: file.name, size: file.size, type: file.type } : 'NO FILE RECEIVED'
+                });
 
                 let uploadedUrl: string | null = null;
 

@@ -25,6 +25,9 @@
     let items: any[] = [];
     let isProcessing = false;
 
+    // Store files separately to ensure they persist for FormData
+    let fileStore: Map<number, File> = new Map();
+
     const expenseCategories = [
         "อาหาร",
         "เดินทาง",
@@ -226,6 +229,16 @@
         return { amount, notes, date };
     }
 
+    // Helper to read file as data URL (for preview)
+    function readFileAsDataUrl(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
     async function processFiles(files: FileList) {
         isProcessing = true;
         const worker = await createWorker("tha+eng");
@@ -237,11 +250,17 @@
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const previewUrl = URL.createObjectURL(file); // Keep original for user preview
+
+            // Create data URL preview (like main expense page)
+            const previewUrl = await readFileAsDataUrl(file);
+
+            // Store file in persistent Map with the index it will have
+            const fileIndex = items.length;
+            fileStore.set(fileIndex, file);
 
             // Initial item state
             const newItem = {
-                file,
+                fileIndex, // Store index to retrieve from fileStore
                 previewUrl,
                 status: "scanning",
                 amount: null,
@@ -295,6 +314,11 @@
     }
 
     function removeItem(index: number) {
+        // Remove from fileStore
+        const item = items[index];
+        if (item && typeof item.fileIndex === "number") {
+            fileStore.delete(item.fileIndex);
+        }
         items = items.filter((_, i) => i !== index);
     }
 </script>
@@ -388,26 +412,53 @@
             enctype="multipart/form-data"
             use:enhance={({ formData }) => {
                 loading = true;
-                // Append files from local state because <input type="file"> is tricky to bind individually in a loop
+
+                console.log("=== Client Form Data Debug ===");
+                console.log("Items count:", items.length);
+                console.log("FileStore size:", fileStore.size);
+
+                // Append files from fileStore (persisted File objects)
                 items.forEach((item, i) => {
-                    if (item.file) {
-                        formData.append(`item_${i}_file`, item.file);
+                    const file = fileStore.get(item.fileIndex);
+
+                    console.log(`Item ${i}:`, {
+                        fileIndex: item.fileIndex,
+                        hasFile: !!file,
+                        fileName: file?.name,
+                        fileSize: file?.size,
+                        fileType: file?.type,
+                        amount: item.amount,
+                    });
+
+                    if (file && file instanceof File && file.size > 0) {
+                        formData.append(`item_${i}_file`, file);
+                        console.log(
+                            `Appended file for item ${i}: ${file.name} (${file.size} bytes)`,
+                        );
+                    } else {
+                        console.warn(
+                            `No valid file for item ${i}, fileIndex: ${item.fileIndex}`,
+                        );
                     }
                 });
 
-                // Debug: Log all form data being sent
-                console.log("=== Form Data Debug ===");
+                // Log all form data
+                console.log("=== Final FormData ===");
                 for (const [key, value] of formData.entries()) {
-                    console.log(`${key}:`, value);
+                    if (value instanceof File) {
+                        console.log(
+                            `${key}: File(${value.name}, ${value.size} bytes)`,
+                        );
+                    } else {
+                        console.log(`${key}:`, value);
+                    }
                 }
-                console.log("=== End Form Data ===");
 
                 return async ({ result, update }) => {
                     loading = false;
                     console.log("Server result:", result);
 
                     if (result.type === "redirect") {
-                        // Handle redirect manually
                         window.location.href = result.location;
                     } else {
                         await update();
@@ -469,14 +520,7 @@
                                 name={`item_${i}_transaction_type`}
                                 value={item.transactionType}
                             />
-                            <input
-                                type="file"
-                                name={`item_${i}_file`}
-                                class="hidden"
-                            />
-                            <!-- Need to pass the file somehow to FormData without browser security blocks, 
-                                 Actually the cleanest way is to use JS to submit, but with SvelteKit enhance 
-                                 we can manually append files. Let's adjust enhance below. -->
+                            <!-- Files are appended via enhance callback from fileStore -->
 
                             <!-- Amount -->
                             <div class="md:col-span-1">
