@@ -1,7 +1,13 @@
 <script lang="ts">
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import { formatDate } from "$lib/utils/formatDate";
-    import { FileText, CheckCircle, XCircle, Filter } from "lucide-svelte";
+    import {
+        FileText,
+        CheckCircle,
+        XCircle,
+        Filter,
+        ScanLine,
+    } from "lucide-svelte";
     import { goto } from "$app/navigation";
     import { page } from "$app/stores";
 
@@ -30,6 +36,12 @@
                 class="text-sm bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition flex items-center gap-2"
             >
                 Export Excel
+            </a>
+            <a
+                href="/expenses/bulk"
+                class="text-sm bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-100 transition flex items-center gap-2 border border-indigo-100"
+            >
+                <ScanLine size={16} /> บันทึกล็อตใหญ่
             </a>
             <a
                 href="/expenses/new"

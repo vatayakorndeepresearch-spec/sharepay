@@ -7,6 +7,7 @@
         ScanLine,
     } from "lucide-svelte";
     import { createWorker } from "tesseract.js";
+    import { preprocessImage } from "$lib/utils/imageProcessor";
 
     export let data;
     export let form;
@@ -36,36 +37,72 @@
         scanning = true;
         try {
             const worker = await createWorker("tha+eng");
+
+            // Preprocess for OCR
+            const processedImageUrl = await preprocessImage(file);
+            console.log("Processed Image URL:", processedImageUrl);
+
             const {
                 data: { text },
-            } = await worker.recognize(file);
+            } = await worker.recognize(processedImageUrl);
             console.log("OCR Raw Text:", text);
 
-            const lines = text.split("\n");
+            const lines = text
+                .split("\n")
+                .map((l) => l.trim())
+                .filter((l) => l.length > 0);
+            console.log("OCR Lines:", lines);
 
-            // --- 1. Extract Amount (Priority: "จำนวน:" or just finding currency) ---
-            let extractedAmount = null;
-            // Pattern: จำนวน: 1,000.00 บาท
-            const amountLineRegex =
-                /(?:จำนวน|amount)\s*[:.]?\s*([\d,]+\.\d{2})/i;
+            // --- 1. Extract Amount ---
+            // Handle both same-line and next-line patterns
+            let extractedAmount: number | null = null;
 
-            for (let line of lines) {
-                const match = line.match(amountLineRegex);
-                if (match) {
-                    extractedAmount = parseFloat(match[1].replace(/,/g, ""));
-                    break;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+
+                // Pattern 1: "จำนวน: 88.00" on same line
+                const sameLineMatch = line.match(
+                    /(?:จำนวน|จํานวน)\s*[:.]?\s*([\d,]+\.?\d*)/i,
+                );
+                if (sameLineMatch && sameLineMatch[1]) {
+                    const val = parseFloat(sameLineMatch[1].replace(/,/g, ""));
+                    if (!isNaN(val) && val > 0) {
+                        extractedAmount = val;
+                        break;
+                    }
+                }
+
+                // Pattern 2: "จำนวน:" label only, amount on next line
+                if (
+                    line.match(/(?:จำนวน|จํานวน)\s*[:.]?\s*$/i) &&
+                    i + 1 < lines.length
+                ) {
+                    const nextLine = lines[i + 1].trim();
+                    const nextMatch = nextLine.match(
+                        /([\d,]+\.?\d*)\s*(?:บาท|THB)?/i,
+                    );
+                    if (nextMatch && nextMatch[1]) {
+                        const val = parseFloat(nextMatch[1].replace(/,/g, ""));
+                        if (!isNaN(val) && val > 0) {
+                            extractedAmount = val;
+                            break;
+                        }
+                    }
                 }
             }
 
-            // Fallback: Just look for currency with THB/บาท pattern if label is missing
+            // Fallback: Find "XX.XX บาท" but skip fee lines
             if (!extractedAmount) {
-                const strictCurrency = text.match(
-                    /([\d,]+\.\d{2})\s*(?:THB|บาท)/i,
-                );
-                if (strictCurrency) {
-                    extractedAmount = parseFloat(
-                        strictCurrency[1].replace(/,/g, ""),
-                    );
+                for (let line of lines) {
+                    if (line.match(/ค่าธรรมเนียม|fee/i)) continue;
+                    const match = line.match(/([\d,]+\.\d{2})\s*(?:บาท|THB)/i);
+                    if (match) {
+                        const val = parseFloat(match[1].replace(/,/g, ""));
+                        if (!isNaN(val) && val > 0) {
+                            extractedAmount = val;
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -73,163 +110,257 @@
                 amount = extractedAmount;
             }
 
-            // --- 2. Extract Date/Time (Priority: Thai/K-Plus format) ---
-            // Pattern: 31 ธ.ค. 68 or 31ธ.ค.68 or 31 Dec 2025
-            const thaiDateRegex =
-                /(\d{1,2})\s*([ก-๙\.\s]{2,}|[a-zA-Z]{3,}\.?)\s*(\d{2,4})/;
+            // --- 2. Extract Date ---
+            // KBank format: "6 ม.ค. 69" or "31 ธ.ค. 68"
+            // Common OCR misreads:
+            // ธ.ค. -> 5.m., s.m., 8.m., s.m, 5.H., sn., sk., sK., ธค
+            // ม.ค. -> 1.ค., w.ค., 2.m., wk., mk.
+            const thaiMonthMap: Record<string, number> = {
+                // Short forms (1-indexed)
+                มค: 1,
+                กพ: 2,
+                มีค: 3,
+                เมย: 4,
+                พค: 5,
+                มิย: 6,
+                กค: 7,
+                สค: 8,
+                กย: 9,
+                ตค: 10,
+                พย: 11,
+                ธค: 12,
+                // Full forms
+                มกราคม: 1,
+                กุมภาพันธ์: 2,
+                มีนาคม: 3,
+                เมษายน: 4,
+                พฤษภาคม: 5,
+                มิถุนายน: 6,
+                กรกฎาคม: 7,
+                สิงหาคม: 8,
+                กันยายน: 9,
+                ตุลาคม: 10,
+                พฤศจิกายน: 11,
+                ธันวาคม: 12,
+                // English
+                jan: 1,
+                feb: 2,
+                mar: 3,
+                apr: 4,
+                may: 5,
+                jun: 6,
+                jul: 7,
+                aug: 8,
+                sep: 9,
+                oct: 10,
+                nov: 11,
+                dec: 12,
+                // Common OCR Misreads (KBank specific)
+                "5m": 12,
+                sm: 12,
+                "8m": 12,
+                "s.m": 12,
+                "5.m": 12,
+                sh: 12,
+                "5h": 12,
+                sk: 12,
+                sn: 12,
+                "5n": 12,
+                "5k": 12,
+                "1m": 1,
+                nm: 1,
+                wk: 1,
+                mk: 1,
+                // KKP Better OCR Misreads
+                "nw": 2, // ก.พ. (February)
+                "n.w": 2,
+                "aw": 2,
+                "a.w": 2,
+            };
 
-            let foundDate = false;
-            for (let line of lines) {
-                const match = line.match(thaiDateRegex);
-                if (match) {
-                    const d = parseInt(match[1]); // Day
-                    const mStr = match[2].toLowerCase(); // Month part
-                    const y = parseInt(match[3]); // Year
+            console.log("[OCR] Starting date extraction from lines:", lines);
 
-                    // Normalize month string (remove dots, trim, spaces)
-                    const normalizedMonth = mStr.replace(/[\.\s]/g, "");
+            // Strategy: Find the date line
+            // - KBank: "DD Month YY HH:MM น."
+            // - KKP Better: "วันที่ 3 ก.พ. 2569 10:57"
+            let dateLine: string | null = null;
+            
+            for (const line of lines) {
+                // KKP Better format: Line contains "วันที่"
+                if (line.includes("วันที่") || line.includes("วนท") || line.includes("วันท")) {
+                    dateLine = line;
+                    console.log(`[OCR] Found date line (KKP Better): "${dateLine}"`);
+                    break;
+                }
+                
+                // KBank format: Line with time pattern and starts with day number
+                if (line.match(/\d{1,2}:\d{2}/) || line.includes("น.") || line.includes("น,")) {
+                    if (line.match(/^\d{1,2}\s/)) {
+                        dateLine = line;
+                        console.log(`[OCR] Found date line (KBank): "${dateLine}"`);
+                        break;
+                    }
+                }
+            }
 
-                    const monthMap: Record<string, number> = {
-                        มค: 0,
-                        กพ: 1,
-                        มีค: 2,
-                        เมย: 3,
-                        พค: 4,
-                        มิย: 5,
-                        กค: 6,
-                        สค: 7,
-                        กย: 8,
-                        ตค: 9,
-                        พย: 10,
-                        ธค: 11,
-                        มกราคม: 0,
-                        กุมภาพันธ์: 1,
-                        มีนาคม: 2,
-                        เมษายน: 3,
-                        พฤษภาคม: 4,
-                        มิถุนายน: 5,
-                        กรกฎาคม: 6,
-                        สิงหาคม: 7,
-                        กันยายน: 8,
-                        ตุลาคม: 9,
-                        พฤศจิกายน: 10,
-                        ธันวาคม: 11,
-                        jan: 0,
-                        feb: 1,
-                        mar: 2,
-                        apr: 3,
-                        may: 4,
-                        jun: 5,
-                        jul: 6,
-                        aug: 7,
-                        sep: 8,
-                        oct: 9,
-                        nov: 10,
-                        dec: 11,
-                        january: 0,
-                        february: 1,
-                        march: 2,
-                        april: 3,
-                        june: 5,
-                        july: 6,
-                        august: 7,
-                        september: 8,
-                        october: 9,
-                        november: 10,
-                        december: 11,
-                    };
+            // Fallback: Find line starting with DD Month pattern
+            if (!dateLine) {
+                for (const line of lines) {
+                    if (line.match(/^\d{1,2}\s+[ก-๙a-zA-Z0-9\.\-]+\s+\d{2,4}/)) {
+                        dateLine = line;
+                        console.log(`[OCR] Found date line (fallback): "${dateLine}"`);
+                        break;
+                    }
+                }
+            }
 
-                    // Try direct match or partial match
-                    let monthIndex = monthMap[normalizedMonth];
+            if (dateLine) {
+                // Extract date from the identified date line
+                // Pattern 1: Starts with day number (KBank: "27 ธ.ค. 68")
+                // Pattern 2: Has วันที่ label (KKP Better: "วันที่ 3 ก.พ. 2569")
+                let fullMatch = dateLine.match(
+                    /^(\d{1,2})[\s\.\/-]+([ก-๙a-zA-Z0-9\.\-]+)[\s\.\/-]+(\d{2,4})/,
+                );
+                
+                // If no match at start, try matching after วันที่ label
+                if (!fullMatch) {
+                    fullMatch = dateLine.match(
+                        /(?:วันที่|วนท|วันท)[\s:]*(\d{1,2})[\s\.\/-]+([ก-๙a-zA-Z0-9\.\-]+)[\s\.\/-]+(\d{2,4})/,
+                    );
+                }
+                
+                console.log(`[OCR] DateLine Match:`, fullMatch);
 
-                    // If not found, try to find if any key is contained in normalizedMonth
-                    if (monthIndex === undefined) {
-                        for (const key in monthMap) {
-                            if (normalizedMonth.includes(key)) {
-                                monthIndex = monthMap[key];
+                if (fullMatch) {
+                    const d = parseInt(fullMatch[1]);
+                    const mStrRaw = fullMatch[2].toLowerCase();
+                    const mStr = mStrRaw.replace(/[\.\s\-]/g, "");
+                    const yRaw = parseInt(fullMatch[3]);
+
+                    console.log(`[OCR] Parsed: day=${d}, mStr="${mStr}", year=${yRaw}`);
+
+                    // Try map
+                    let m = thaiMonthMap[mStr];
+                    
+                    if (!m) {
+                        // Fuzzy search map
+                        for (const [key, val] of Object.entries(thaiMonthMap)) {
+                            if (mStr.length >= 2 && (mStr.startsWith(key) || key.startsWith(mStr) || mStr.includes(key))) {
+                                m = val;
+                                console.log(`[OCR] Fuzzy match: "${mStr}" -> key "${key}" -> month ${m}`);
                                 break;
                             }
                         }
                     }
 
-                    if (monthIndex !== undefined) {
-                        let fullYear = 2000;
-                        if (y > 2500) {
-                            // BE Full
-                            fullYear = y - 543;
-                        } else if (y >= 2000) {
-                            // AD Full
-                            fullYear = y;
-                        } else {
-                            // Short Year
-                            // If > 50, likely BE short (68 -> 2568 -> 2025)
-                            // If < 50, likely AD short (25 -> 2025)
-                            if (y > 50) {
-                                fullYear = 2500 + y - 543;
-                            } else {
-                                fullYear = 2000 + y;
-                            }
+                    // Desperate fuzzy check for common OCR errors
+                    if (!m) {
+                        // December patterns: 5m, sm, 8m, sk, sn, etc.
+                        if ((mStr.includes("m") || mStr.includes("n") || mStr.includes("k") || mStr.includes("h")) && 
+                            (mStr.includes("5") || mStr.includes("s") || mStr.includes("8"))) {
+                            m = 12;
+                            console.log(`[OCR] Desperate match: "${mStr}" -> December (12)`);
                         }
-
-                        // Validate date components
-                        if (
-                            d >= 1 &&
-                            d <= 31 &&
-                            monthIndex >= 0 &&
-                            monthIndex <= 11
-                        ) {
-                            const pad = (n: number) =>
-                                String(n).padStart(2, "0");
-                            const newDate = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
-                            console.log(
-                                "OCR Extracted Date:",
-                                newDate,
-                                "from line:",
-                                line,
-                            );
-                            paidAt = newDate;
-                            foundDate = true;
+                        // Thai ธ.ค. patterns
+                        if (mStr.includes("ค") || mStr.includes("ธ")) {
+                            m = 12;
+                            console.log(`[OCR] Thai char match: "${mStr}" -> December (12)`);
+                        }
+                        // Thai ม.ค. patterns
+                        if (mStr.includes("ม") && (mStr.includes("ค") || mStr.length <= 3)) {
+                            m = 1;
+                            console.log(`[OCR] Thai char match: "${mStr}" -> January (1)`);
                         }
                     }
-                    if (foundDate) break;
+
+                    if (m && d >= 1 && d <= 31) {
+                        let finalYear = yRaw;
+
+                        // Normalize year
+                        if (finalYear > 2500) {
+                            finalYear = finalYear - 543;
+                        } else if (finalYear < 100) {
+                            if (finalYear > 40) finalYear = 2500 + finalYear - 543;
+                            else finalYear = 2000 + finalYear;
+                        }
+
+                        if (finalYear >= 2000 && finalYear <= 2100) {
+                            const pad = (n: number) => String(n).padStart(2, "0");
+                            paidAt = `${finalYear}-${pad(m)}-${pad(d)}`;
+                            console.log(`[OCR] Date SUCCESS: ${paidAt}`);
+                        }
+                    }
                 }
             }
 
-            // --- 3. Extract Note/Memo (Priority: "บันทึกช่วยจำ") ---
+            // Fallback: Search all lines for numeric date
+            if (paidAt === `${year}-${month}-${day}`) {
+                for (const line of lines) {
+                    const numericMatch = line.match(/(\d{1,2})[\/\.](\d{1,2})[\/\.](\d{2,4})/);
+                    if (numericMatch) {
+                        const dd = parseInt(numericMatch[1]);
+                        const mm = parseInt(numericMatch[2]);
+                        const yy = parseInt(numericMatch[3]);
+                        if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
+                            let finalYear = yy;
+                            if (finalYear > 2500) finalYear -= 543;
+                            else if (finalYear < 100) {
+                                if (finalYear > 40) finalYear = 2500 + finalYear - 543;
+                                else finalYear = 2000 + finalYear;
+                            }
+                            const pad = (n: number) => String(n).padStart(2, "0");
+                            paidAt = `${finalYear}-${pad(mm)}-${pad(dd)}`;
+                            console.log(`[OCR] Date SUCCESS (Numeric): ${paidAt}`);
+                            break;
+                        }
+                }
+            }
+
+            // --- 3. Extract Note/Memo ---
+            // KBank: "บันทึกช่วยจำ: xxx"
+            // KKP Better: Just "ค่าข้าว" at the bottom
             let extractedNote = "";
+            
+            // First try: Look for labeled notes (KBank style)
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                if (line.match(/(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)/i)) {
-                    // Start extracting from this line (after label)
-                    // Sometimes the content is on the same line, sometimes next line(s)
+                const noteLabelMatch = line.match(
+                    /(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)/i,
+                );
+                if (noteLabelMatch) {
                     let content = line
-                        .replace(
-                            /.*(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)\s*[:.]?\s*/i,
-                            "",
+                        .substring(
+                            noteLabelMatch.index! + noteLabelMatch[0].length,
                         )
+                        .replace(/^[:.\s]+/, "")
                         .trim();
-
-                    // If empty on this line, check next line
-                    if (!content && i + 1 < lines.length) {
+                    if (!content && i + 1 < lines.length)
                         content = lines[i + 1].trim();
-                    } else if (content) {
-                        // If has content, maybe it continues to next line? (Optional)
-                    }
-
                     if (content) {
                         extractedNote = content;
+                        break;
                     }
-                    break;
+                }
+            }
+
+            // Fallback: KKP Better - Look for lines containing "ค่า" (expense descriptions)
+            // OCR may add prefixes like "BE" before the actual note
+            if (!extractedNote) {
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    const line = lines[i].trim();
+                    // Look for "ค่า" anywhere in line (e.g., "BE ค่าข้าว")
+                    const noteMatch = line.match(/ค่า[ก-๙a-zA-Z]+/);
+                    if (noteMatch) {
+                        extractedNote = noteMatch[0];
+                        console.log(`[OCR] Found note (KKP Better): "${extractedNote}" from line: "${line}"`);
+                        break;
+                    }
                 }
             }
 
             if (extractedNote) {
-                // Remove redundant prefix if any
                 notes = extractedNote;
-                description = extractedNote; // Map Memo to Description
-            } else {
-                // Fallback: description from first line or specific keywords if needed?
-                // For now, keep it empty if not found.
+                description = extractedNote;
             }
 
             await worker.terminate();
@@ -278,11 +409,18 @@
         "สุขภาพ",
         "บันเทิง",
         "ช้อปปิ้ง",
+        "ค่าน้ำ",
+        "ค่าไฟ",
+        "ค่าโทรศัพท์",
         "ค่าอินเตอร์เน็ต",
+        "ค่าสมาชิก/Sub",
         "ค่าเช่าบ้าน",
-        "ค่าชาร์รถ",
+        "ค่าชาร์จรถ",
         "ค่าน้ำมัน",
-        "เงินเดือน",
+        "ประกัน",
+        "การศึกษา",
+        "สัตว์เลี้ยง",
+        "บริจาค/ทำบุญ",
     ];
 
     const incomeCategories = [
@@ -370,6 +508,8 @@
                 id="project_id"
                 required
                 class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                value={data.projects.find((p) => p.name === "กองกลาง")?.id ||
+                    data.projects[0]?.id}
             >
                 {#each data.projects as project}
                     <option value={project.id}>{project.name}</option>
