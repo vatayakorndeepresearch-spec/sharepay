@@ -16,6 +16,19 @@ export const actions: Actions = {
         const formData = await request.formData();
         const itemCount = parseInt(formData.get('item_count') as string || '0');
 
+        console.log('=== Bulk Save Debug ===');
+        console.log('Item count:', itemCount);
+
+        // Log all form data keys
+        for (const [key, value] of formData.entries()) {
+            if (key.includes('file')) {
+                console.log(`${key}: [File object]`);
+            } else {
+                console.log(`${key}:`, value);
+            }
+        }
+        console.log('=== End Debug ===');
+
         const errors = [];
         const successIds = [];
 
@@ -30,6 +43,8 @@ export const actions: Actions = {
                 const category = (formData.get(`item_${i}_category`) as string) || 'Others';
                 const notes = formData.get(`item_${i}_notes`) as string || '';
                 const file = formData.get(`item_${i}_file`) as File;
+
+                console.log(`Processing item ${i}:`, { projectId, transactionType, paidBy, amount, paidAt, description, category });
 
                 let uploadedUrl: string | null = null;
 

@@ -394,9 +394,24 @@
                         formData.append(`item_${i}_file`, item.file);
                     }
                 });
-                return async ({ update }) => {
+
+                // Debug: Log all form data being sent
+                console.log("=== Form Data Debug ===");
+                for (const [key, value] of formData.entries()) {
+                    console.log(`${key}:`, value);
+                }
+                console.log("=== End Form Data ===");
+
+                return async ({ result, update }) => {
                     loading = false;
-                    update();
+                    console.log("Server result:", result);
+
+                    if (result.type === "redirect") {
+                        // Handle redirect manually
+                        window.location.href = result.location;
+                    } else {
+                        await update();
+                    }
                 };
             }}
             class="space-y-4"
@@ -451,12 +466,12 @@
                         >
                             <input
                                 type="hidden"
-                                name="item_{i}_transaction_type"
+                                name={`item_${i}_transaction_type`}
                                 value={item.transactionType}
                             />
                             <input
                                 type="file"
-                                name="item_{i}_file"
+                                name={`item_${i}_file`}
                                 class="hidden"
                             />
                             <!-- Need to pass the file somehow to FormData without browser security blocks, 
@@ -472,7 +487,7 @@
                                 <div class="relative">
                                     <input
                                         type="number"
-                                        name="item_{i}_amount"
+                                        name={`item_${i}_amount`}
                                         step="0.01"
                                         bind:value={item.amount}
                                         class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-bold"
@@ -493,7 +508,7 @@
                                 >
                                 <input
                                     type="date"
-                                    name="item_{i}_date"
+                                    name={`item_${i}_date`}
                                     bind:value={item.date}
                                     class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                                 />
@@ -506,7 +521,7 @@
                                     >หมวดหมู่</label
                                 >
                                 <select
-                                    name="item_{i}_category"
+                                    name={`item_${i}_category`}
                                     bind:value={item.category}
                                     class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                                 >
@@ -524,7 +539,7 @@
                                     >โปรเจค</label
                                 >
                                 <select
-                                    name="item_{i}_project_id"
+                                    name={`item_${i}_project_id`}
                                     bind:value={item.projectId}
                                     class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                                 >
@@ -543,7 +558,7 @@
                                     >ผู้จ่าย</label
                                 >
                                 <select
-                                    name="item_{i}_paid_by"
+                                    name={`item_${i}_paid_by`}
                                     bind:value={item.paidBy}
                                     class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                                 >
@@ -563,14 +578,14 @@
                                 >
                                 <input
                                     type="text"
-                                    name="item_{i}_description"
+                                    name={`item_${i}_description`}
                                     bind:value={item.description}
                                     class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                                     placeholder="ใส่รายละเอียด..."
                                 />
                                 <input
                                     type="hidden"
-                                    name="item_{i}_notes"
+                                    name={`item_${i}_notes`}
                                     value={item.notes}
                                 />
                             </div>
