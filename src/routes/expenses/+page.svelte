@@ -9,9 +9,16 @@
         ScanLine,
         Plus,
         CirclePlus,
+        ChevronRight,
+        Calendar,
+        Receipt,
+        Banknote,
+        Shapes,
+        Sparkles,
     } from "lucide-svelte";
     import { goto } from "$app/navigation";
     import { page } from "$app/stores";
+    import { fade, slide, fly, scale } from "svelte/transition";
 
     export let data;
     $: ({ expenses, projects, filters } = data);
@@ -23,8 +30,6 @@
 
         const query = new URLSearchParams($page.url.searchParams);
         query.set(id, value);
-
-        // Reset pagination if needed, but we don't have pagination yet
         goto(`?${query.toString()}`);
     }
 
@@ -44,94 +49,117 @@
 
 <svelte:window on:click={closeMenu} />
 
-<div class="space-y-4">
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">รายการทั้งหมด</h1>
-        <div class="flex gap-2" bind:this={menuRef}>
-            <div class="relative">
-                <button
-                    on:click|stopPropagation={toggleMenu}
-                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm text-sm flex items-center gap-2"
-                >
-                    <CirclePlus size={18} /> เพิ่มรายการ
-                </button>
+<div class="space-y-6 pb-20">
+    <div class="flex justify-between items-end mb-4 px-1">
+        <div>
+            <h1
+                class="text-3xl font-black text-slate-900 font-display tracking-tight"
+            >
+                รายการทั้งหมด
+            </h1>
+            <p
+                class="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1"
+            >
+                ประวัติการทำรายการของคุณ
+            </p>
+        </div>
 
-                {#if showAddMenu}
-                    <div
-                        class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 overflow-hidden"
+        <div class="relative" bind:this={menuRef}>
+            <button
+                on:click|stopPropagation={toggleMenu}
+                class="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-black font-display tracking-tight hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 text-sm flex items-center gap-2 active:scale-95"
+            >
+                <Plus size={20} /> เพิ่มรายการ
+            </button>
+
+            {#if showAddMenu}
+                <div
+                    class="absolute right-0 mt-3 w-56 bg-white/90 backdrop-blur-xl rounded-[24px] shadow-2xl border border-slate-100 py-2 z-50 overflow-hidden"
+                    in:fly={{ y: 10, duration: 200 }}
+                    out:fade={{ duration: 150 }}
+                >
+                    <a
+                        href="/expenses/new"
+                        class="flex items-center gap-4 px-4 py-4 text-sm text-slate-700 hover:bg-indigo-50 transition-colors group"
+                        on:click={() => (showAddMenu = false)}
                     >
-                        <a
-                            href="/expenses/new"
-                            class="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-                            on:click={() => (showAddMenu = false)}
+                        <div
+                            class="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shadow-sm"
                         >
+                            <Plus size={20} />
+                        </div>
+                        <div>
+                            <div class="font-bold">รายการเดียว</div>
                             <div
-                                class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center"
+                                class="text-[10px] text-slate-400 uppercase font-bold tracking-tight"
                             >
-                                <Plus size={16} />
+                                Manual Entry
                             </div>
-                            <div>
-                                <div class="font-medium">รายการเดียว</div>
-                                <div class="text-xs text-gray-500">
-                                    จดบันทึกทั่วไป
-                                </div>
-                            </div>
-                        </a>
-                        <a
-                            href="/expenses/bulk"
-                            class="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition border-t border-gray-50"
-                            on:click={() => (showAddMenu = false)}
+                        </div>
+                    </a>
+                    <div class="mx-4 border-t border-slate-50"></div>
+                    <a
+                        href="/expenses/bulk"
+                        class="flex items-center gap-4 px-4 py-4 text-sm text-slate-700 hover:bg-emerald-50 transition-colors group"
+                        on:click={() => (showAddMenu = false)}
+                    >
+                        <div
+                            class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-sm"
                         >
+                            <Sparkles size={18} />
+                        </div>
+                        <div>
+                            <div class="font-bold">หลายรายการ</div>
                             <div
-                                class="w-8 h-8 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center"
+                                class="text-[10px] text-slate-400 uppercase font-bold tracking-tight"
                             >
-                                <ScanLine size={16} />
+                                AI Slip Scan
                             </div>
-                            <div>
-                                <div class="font-medium">หลายรายการ</div>
-                                <div class="text-xs text-gray-500">
-                                    อัพโหลดสลิป
-                                </div>
-                            </div>
-                        </a>
-                    </div>
-                {/if}
-            </div>
+                        </div>
+                    </a>
+                </div>
+            {/if}
         </div>
     </div>
 
     <!-- Filters -->
     <div
-        class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3"
+        class="bg-white/70 backdrop-blur-md p-5 rounded-[28px] border border-white shadow-sm space-y-4 premium-shadow"
     >
-        <div class="flex items-center gap-2 text-gray-700 font-medium text-sm">
-            <Filter size={16} /> ตัวกรอง
+        <div
+            class="flex items-center gap-2 text-slate-900 font-bold text-xs uppercase tracking-widest px-1"
+        >
+            <Filter size={14} class="text-indigo-600" /> ตัวกรองข้อมูล
         </div>
-        <div class="grid grid-cols-3 gap-3">
-            <div>
-                <label for="type" class="block text-xs text-gray-500 mb-1"
+        <div class="grid grid-cols-3 gap-4">
+            <div class="space-y-1.5">
+                <label
+                    for="type"
+                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter px-1"
                     >ประเภท</label
                 >
                 <select
                     id="type"
                     value={filters.type}
                     on:change={handleFilterChange}
-                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    class="w-full text-xs font-bold bg-slate-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-3 appearance-none"
                 >
                     <option value="all">ทั้งหมด</option>
                     <option value="income">รายรับ</option>
                     <option value="expense">รายจ่าย</option>
                 </select>
             </div>
-            <div>
-                <label for="project" class="block text-xs text-gray-500 mb-1"
+            <div class="space-y-1.5">
+                <label
+                    for="project"
+                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter px-1"
                     >โปรเจค</label
                 >
                 <select
                     id="project"
                     value={filters.project}
                     on:change={handleFilterChange}
-                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    class="w-full text-xs font-bold bg-slate-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-3 appearance-none"
                 >
                     <option value="all">ทั้งหมด</option>
                     {#each projects as project}
@@ -139,15 +167,17 @@
                     {/each}
                 </select>
             </div>
-            <div>
-                <label for="status" class="block text-xs text-gray-500 mb-1"
+            <div class="space-y-1.5">
+                <label
+                    for="status"
+                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter px-1"
                     >สถานะ</label
                 >
                 <select
                     id="status"
                     value={filters.status}
                     on:change={handleFilterChange}
-                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    class="w-full text-xs font-bold bg-slate-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-3 appearance-none"
                 >
                     <option value="all">ทั้งหมด</option>
                     <option value="unpaid">ยังไม่เคลียร์</option>
@@ -158,97 +188,137 @@
     </div>
 
     <!-- List -->
-    <div class="bg-white rounded-xl shadow overflow-hidden">
+    <div class="space-y-4">
         {#if expenses.length === 0}
-            <div class="p-12 text-center">
+            <div
+                class="bg-white rounded-[32px] p-16 text-center premium-shadow border border-slate-100"
+                in:fade
+            >
                 <div
-                    class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4"
+                    class="w-20 h-20 bg-slate-50 rounded-[28px] flex items-center justify-center mx-auto mb-6 text-slate-300"
                 >
-                    <FileText class="text-gray-400" size={32} />
+                    <Receipt size={40} />
                 </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">
-                    ยังไม่มีรายการ
+                <h3 class="text-xl font-black text-slate-900 mb-2 font-display">
+                    ไม่พบรายการ
                 </h3>
-                <p class="text-gray-500 mb-8 max-w-sm mx-auto">
-                    เริ่มต้นจดบันทึกรายรับ-รายจ่ายของคุณได้เลย
-                    หรือจะอัพโหลดสลิปหลายใบพร้อมกันก็ได้
+                <p
+                    class="text-slate-400 mb-8 max-w-[240px] mx-auto text-sm font-medium"
+                >
+                    ลองเปลี่ยนตัวกรอง หรือเริ่มบันทึกรายการใหม่กันเลย
                 </p>
-                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                <div class="flex flex-col gap-3 max-w-[200px] mx-auto">
                     <a
                         href="/expenses/new"
-                        class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition shadow-sm"
+                        class="bg-indigo-600 text-white py-3.5 rounded-2xl font-black tracking-tight hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 active:scale-95 font-display text-sm"
                     >
-                        <Plus size={20} /> เพิ่มรายการใหม่
-                    </a>
-                    <a
-                        href="/expenses/bulk"
-                        class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
-                    >
-                        <ScanLine size={20} /> บันทึกล็อตใหญ่
+                        บันทึกรายการใหม่
                     </a>
                 </div>
             </div>
         {:else}
-            <div class="divide-y divide-gray-100">
-                {#each expenses as expense}
+            <div class="grid gap-3">
+                {#each expenses as expense, i}
                     <a
                         href="/expenses/{expense.id}"
-                        class="block p-4 hover:bg-gray-50 transition"
+                        class="group block bg-white hover:bg-slate-50 p-4 rounded-[24px] border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-md hover:scale-[1.01] active:scale-95"
+                        in:fly={{ y: 20, duration: 400, delay: i * 50 }}
                     >
-                        <div class="flex justify-between items-start mb-1">
-                            <div>
-                                <div class="font-medium text-gray-900">
-                                    {expense.description}
+                        <div class="flex justify-between items-center mb-3">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="w-10 h-10 rounded-2xl flex items-center justify-center transition-colors {expense.transaction_type ===
+                                    'income'
+                                        ? 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white'
+                                        : 'bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white'}"
+                                >
+                                    {#if expense.transaction_type === "income"}
+                                        <Banknote size={20} />
+                                    {:else}
+                                        <Receipt size={20} />
+                                    {/if}
                                 </div>
-                                <div class="text-xs text-gray-500 mt-0.5">
-                                    {formatDate(expense.paid_at)}
+                                <div>
+                                    <div
+                                        class="font-bold text-slate-900 text-md"
+                                    >
+                                        {expense.description}
+                                    </div>
+                                    <div
+                                        class="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-0.5"
+                                    >
+                                        <Calendar size={12} />
+                                        {formatDate(expense.paid_at)}
+                                    </div>
                                 </div>
                             </div>
                             <div class="text-right">
                                 <div
-                                    class="font-bold {expense.is_reimbursed
-                                        ? 'text-gray-400 line-through'
-                                        : 'text-indigo-600'}"
+                                    class="text-lg font-black font-display tracking-tight {expense.is_reimbursed &&
+                                    expense.transaction_type !== 'income'
+                                        ? 'text-slate-300 line-through'
+                                        : expense.transaction_type === 'income'
+                                          ? 'text-emerald-600'
+                                          : 'text-slate-900'}"
                                 >
-                                    {formatCurrency(expense.amount)}
+                                    {expense.transaction_type === "income"
+                                        ? "+"
+                                        : ""}{formatCurrency(expense.amount)}
                                 </div>
+                                {#if expense.transaction_type !== "income"}
+                                    <div class="mt-1">
+                                        {#if expense.is_reimbursed}
+                                            <span
+                                                class="text-[9px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                                                ><CheckCircle
+                                                    size={10}
+                                                    strokeWidth={3}
+                                                /> PAID</span
+                                            >
+                                        {:else}
+                                            <span
+                                                class="text-[9px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                                                ><XCircle
+                                                    size={10}
+                                                    strokeWidth={3}
+                                                /> PENDING</span
+                                            >
+                                        {/if}
+                                    </div>
+                                {/if}
                             </div>
                         </div>
 
-                        <div class="flex justify-between items-center mt-2">
-                            <div class="flex items-center gap-2">
-                                <span
-                                    class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"
+                        <div
+                            class="flex justify-between items-center pt-3 border-t border-slate-50"
+                        >
+                            <div class="flex items-center gap-1.5">
+                                <div
+                                    class="flex items-center gap-1 bg-slate-50 text-slate-500 px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-100/50"
                                 >
+                                    <Shapes size={10} />
                                     {expense.projects?.name}
-                                </span>
+                                </div>
                                 {#if expense.category}
-                                    <span
-                                        class="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full"
+                                    <div
+                                        class="bg-indigo-50/50 text-indigo-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-indigo-100/30"
                                     >
                                         {expense.category}
-                                    </span>
+                                    </div>
                                 {/if}
                                 {#if expense.proof_image_url}
-                                    <FileText size={14} class="text-gray-400" />
+                                    <div
+                                        class="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors"
+                                    >
+                                        <FileText size={12} />
+                                    </div>
                                 {/if}
                             </div>
 
-                            <div class="flex items-center gap-1 text-xs">
-                                {#if expense.transaction_type !== "income"}
-                                    {#if expense.is_reimbursed}
-                                        <span
-                                            class="text-green-600 flex items-center gap-1"
-                                            ><CheckCircle size={12} /> เคลียร์แล้ว</span
-                                        >
-                                    {:else}
-                                        <span
-                                            class="text-red-500 flex items-center gap-1"
-                                            ><XCircle size={12} /> รอเคลียร์</span
-                                        >
-                                    {/if}
-                                {/if}
-                            </div>
+                            <ChevronRight
+                                size={16}
+                                class="text-slate-300 group-hover:text-indigo-600 transition-colors group-hover:translate-x-1 duration-300"
+                            />
                         </div>
                     </a>
                 {/each}

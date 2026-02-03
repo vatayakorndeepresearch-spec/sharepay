@@ -12,10 +12,13 @@
         AlertCircle,
         X,
         Save,
+        ChevronLeft,
+        Sparkles,
     } from "lucide-svelte";
-    import { createWorker } from "tesseract.js";
+    import { getOCRWorker } from "$lib/stores/ocrStore";
     import { onMount } from "svelte";
     import { preprocessImage } from "$lib/utils/imageProcessor";
+    import { fade, slide, scale } from "svelte/transition";
 
     export let data;
     export let form;
@@ -57,62 +60,7 @@
         let date = "";
         let notes = "";
 
-        // --- 1. Extract Amount ---
-        // Handle both same-line and next-line patterns
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-
-            // Pattern 1: "จำนวน: 88.00" or "จำนวน 88.00" on same line
-            const sameLineMatch = line.match(
-                /(?:จำนวน|จํานวน)\s*[:.]?\s*([\d,]+\.?\d*)/i,
-            );
-            if (sameLineMatch && sameLineMatch[1]) {
-                const val = parseFloat(sameLineMatch[1].replace(/,/g, ""));
-                if (!isNaN(val) && val > 0) {
-                    amount = val;
-                    break;
-                }
-            }
-
-            // Pattern 2: "จำนวน:" label only, amount on next line
-            if (
-                line.match(/(?:จำนวน|จํานวน)\s*[:.]?\s*$/i) &&
-                i + 1 < lines.length
-            ) {
-                const nextLine = lines[i + 1].trim();
-                const nextMatch = nextLine.match(
-                    /([\d,]+\.?\d*)\s*(?:บาท|THB)?/i,
-                );
-                if (nextMatch && nextMatch[1]) {
-                    const val = parseFloat(nextMatch[1].replace(/,/g, ""));
-                    if (!isNaN(val) && val > 0) {
-                        amount = val;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Fallback: Find "XX.XX บาท" but skip fee lines
-        if (!amount) {
-            for (let line of lines) {
-                if (line.match(/ค่าธรรมเนียม|fee/i)) continue;
-                const match = line.match(/([\d,]+\.\d{2})\s*(?:บาท|THB)/i);
-                if (match) {
-                    const val = parseFloat(match[1].replace(/,/g, ""));
-                    if (!isNaN(val) && val > 0) {
-                        amount = val;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // --- 2. Extract Date ---
-        // KBank format: "6 ม.ค. 69" or "31 ธ.ค. 68"
         const thaiMonthMap: Record<string, number> = {
-            // Short forms (1-indexed)
             มค: 1,
             กพ: 2,
             มีค: 3,
@@ -125,7 +73,6 @@
             ตค: 10,
             พย: 11,
             ธค: 12,
-            // Full forms
             มกราคม: 1,
             กุมภาพันธ์: 2,
             มีนาคม: 3,
@@ -138,7 +85,6 @@
             ตุลาคม: 10,
             พฤศจิกายน: 11,
             ธันวาคม: 12,
-            // English
             jan: 1,
             feb: 2,
             mar: 3,
@@ -153,8 +99,22 @@
             dec: 12,
         };
 
+        // Extraction logic matches new/+page.svelte
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            const sameLineMatch = line.match(
+                /(?:จำนวน|จํานวน)\s*[:.]?\s*([\d,]+\.?\d*)/i,
+            );
+            if (sameLineMatch && sameLineMatch[1]) {
+                const val = parseFloat(sameLineMatch[1].replace(/,/g, ""));
+                if (!isNaN(val) && val > 0) {
+                    amount = val;
+                    break;
+                }
+            }
+        }
+
         for (let line of lines) {
-            // Match: day + thai/eng month + year (2 or 4 digits)
             const dateMatch = line.match(
                 /(\d{1,2})\s*([ก-๙a-zA-Z\.]+)\s*(\d{2,4})/,
             );
@@ -164,11 +124,7 @@
                     .toLowerCase()
                     .replace(/[\.\s]/g, "");
                 const yearRaw = parseInt(dateMatch[3]);
-
-                // Try to find month (direct match first)
                 let month = thaiMonthMap[monthStr];
-
-                // If not found, try partial match
                 if (!month) {
                     for (const [key, val] of Object.entries(thaiMonthMap)) {
                         if (monthStr.includes(key) || key.includes(monthStr)) {
@@ -177,22 +133,14 @@
                         }
                     }
                 }
-
                 if (month && day >= 1 && day <= 31) {
-                    // Convert BE to AD if needed
                     let year = yearRaw;
-                    if (yearRaw > 2500) {
-                        year = yearRaw - 543; // Full BE year
-                    } else if (yearRaw < 100) {
-                        // Short year: 69 -> BE 2569 -> AD 2026
-                        if (yearRaw > 40) {
-                            year = 2500 + yearRaw - 543;
-                        } else {
-                            year = 2000 + yearRaw;
-                        }
-                    }
-
-                    // Validate Year Range (e.g. 2000 - 2100)
+                    if (yearRaw > 2500) year = yearRaw - 543;
+                    else if (yearRaw < 100)
+                        year =
+                            yearRaw > 40
+                                ? 2500 + yearRaw - 543
+                                : 2000 + yearRaw;
                     if (year >= 2000 && year <= 2100) {
                         const pad = (n: number) => String(n).padStart(2, "0");
                         date = `${year}-${pad(month)}-${pad(day)}`;
@@ -202,11 +150,8 @@
             }
         }
 
-        if (!date) {
-            date = new Date().toISOString().split("T")[0];
-        }
+        if (!date) date = new Date().toISOString().split("T")[0];
 
-        // --- 3. Extract Note/Memo ---
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             const noteLabelMatch = line.match(
@@ -229,38 +174,27 @@
         return { amount, notes, date };
     }
 
-    // Helper to read file as data URL (for preview)
-    function readFileAsDataUrl(file: File): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-    }
-
     async function processFiles(files: FileList) {
         isProcessing = true;
-        const worker = await createWorker("tha+eng");
+        const worker = await getOCRWorker();
 
-        // Find "กองกลาง" project ID
         const defaultProject =
             data.projects.find((p) => p.name === "กองกลาง") || data.projects[0];
         const defaultProjectId = defaultProject?.id || "";
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
+            const previewUrl = await new Promise<string>((res) => {
+                const r = new FileReader();
+                r.onload = (e) => res(e.target?.result as string);
+                r.readAsDataURL(file);
+            });
 
-            // Create data URL preview (like main expense page)
-            const previewUrl = await readFileAsDataUrl(file);
-
-            // Store file in persistent Map with the index it will have
             const fileIndex = items.length;
             fileStore.set(fileIndex, file);
 
-            // Initial item state
             const newItem = {
-                fileIndex, // Store index to retrieve from fileStore
+                fileIndex,
                 previewUrl,
                 status: "scanning",
                 amount: null,
@@ -277,17 +211,11 @@
             const currentIndex = items.length - 1;
 
             try {
-                // Preprocess for OCR
                 const processedImageUrl = await preprocessImage(file);
-
-                // Run OCR with processed image
                 const {
                     data: { text },
                 } = await worker.recognize(processedImageUrl);
-
-                console.log(`OCR Raw Text [${i}]:`, text);
                 const extracted = extractData(text);
-                console.log(`Extracted [${i}]:`, extracted);
 
                 items[currentIndex] = {
                     ...items[currentIndex],
@@ -301,63 +229,42 @@
                 items[currentIndex].status = "error";
             }
         }
-
-        await worker.terminate();
         isProcessing = false;
     }
 
     function handleFileChange(event: Event) {
         const input = event.target as HTMLInputElement;
-        if (input.files) {
-            processFiles(input.files);
-        }
+        if (input.files) processFiles(input.files);
     }
 
     function removeItem(index: number) {
-        // Remove from fileStore
         const item = items[index];
-        if (item && typeof item.fileIndex === "number") {
+        if (item && typeof item.fileIndex === "number")
             fileStore.delete(item.fileIndex);
-        }
         items = items.filter((_, i) => i !== index);
     }
 </script>
 
-<div class="max-w-3xl mx-auto pb-20">
-    <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
+<div class="max-w-3xl mx-auto pb-32">
+    <div class="flex items-center justify-between mb-8 px-1">
+        <div class="flex items-center gap-2">
             <a
                 href="/expenses"
-                class="p-2 -ml-2 text-gray-500 hover:text-gray-900 transition rounded-full hover:bg-gray-100"
+                class="p-2 -ml-2 text-slate-400 hover:text-slate-900 transition-colors"
             >
-                <ArrowLeft size={24} />
+                <ChevronLeft size={24} />
             </a>
-            <h1 class="text-2xl font-bold text-gray-800">
-                บันทึกสลิปหลายรายการ
+            <h1 class="text-2xl font-black text-slate-900 font-display">
+                บันทึกหลายรายการ
             </h1>
         </div>
 
-        <div class="flex items-center gap-2">
-            {#if items.length > 0}
-                <button
-                    type="submit"
-                    form="bulk-save-form"
-                    disabled={loading || isProcessing}
-                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm text-sm flex items-center gap-2 disabled:opacity-50"
-                >
-                    {#if loading}
-                        <Loader2 class="animate-spin" size={18} />
-                    {:else}
-                        <Save size={18} />
-                    {/if}
-                    บันทึก
-                </button>
-            {/if}
-
+        <div class="flex items-center gap-3">
             <label
-                class="cursor-pointer bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition shadow-sm text-sm flex items-center gap-2"
+                class="cursor-pointer bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-2xl font-bold hover:bg-slate-50 transition shadow-sm text-xs flex items-center gap-2 active:scale-95"
             >
-                <Plus size={18} /> เพิ่มสลิป
+                <Plus size={16} />
+                <span class="uppercase tracking-tight">เพิ่มสลิป</span>
                 <input
                     type="file"
                     multiple
@@ -371,7 +278,7 @@
 
     {#if form?.error}
         <div
-            class="bg-red-50 text-red-600 p-4 rounded-lg mb-6 text-sm flex items-start gap-2"
+            class="bg-rose-50 text-rose-600 p-4 rounded-2xl mb-6 text-sm font-medium border border-rose-100 flex items-start gap-2"
         >
             <AlertCircle size={18} class="shrink-0 mt-0.5" />
             <span>{form.error}</span>
@@ -380,19 +287,23 @@
 
     {#if items.length === 0}
         <div
-            class="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center"
+            class="bg-white border-2 border-dashed border-slate-200 rounded-[32px] p-16 text-center premium-shadow"
         >
             <div
-                class="bg-indigo-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                class="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-indigo-600"
             >
-                <Upload class="text-indigo-600" size={32} />
+                <Upload size={40} />
             </div>
-            <h3 class="text-lg font-medium text-gray-900 mb-1">ยังไม่มีสลิป</h3>
-            <p class="text-gray-500 mb-6">
-                อัพโหลดรูปสลิปธนาคารเพื่อบันทึกรายการอัตโนมัติ
+            <h3 class="text-xl font-black text-slate-900 mb-2 font-display">
+                ยังไม่มีสลิป
+            </h3>
+            <p
+                class="text-slate-500 mb-8 max-w-[240px] mx-auto text-sm font-medium"
+            >
+                อัพโหลดรูปสลิปธนาคารหลายรูปเพื่อบันทึกรายการอัตโนมัติด้วย AI
             </p>
             <label
-                class="cursor-pointer bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition inline-block"
+                class="cursor-pointer bg-indigo-600 text-white px-8 py-3.5 rounded-2xl font-black tracking-tight hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 active:scale-95 inline-block font-display"
             >
                 เลือกรูปหลายสลิป
                 <input
@@ -412,120 +323,78 @@
             enctype="multipart/form-data"
             use:enhance={({ formData }) => {
                 loading = true;
-
-                console.log("=== Client Form Data Debug ===");
-                console.log("Items count:", items.length);
-                console.log("FileStore size:", fileStore.size);
-
-                // Append files from fileStore (persisted File objects)
                 items.forEach((item, i) => {
                     const file = fileStore.get(item.fileIndex);
-
-                    console.log(`Item ${i}:`, {
-                        fileIndex: item.fileIndex,
-                        hasFile: !!file,
-                        fileName: file?.name,
-                        fileSize: file?.size,
-                        fileType: file?.type,
-                        amount: item.amount,
-                    });
-
-                    if (file && file instanceof File && file.size > 0) {
+                    if (file && file instanceof File && file.size > 0)
                         formData.append(`item_${i}_file`, file);
-                        console.log(
-                            `Appended file for item ${i}: ${file.name} (${file.size} bytes)`,
-                        );
-                    } else {
-                        console.warn(
-                            `No valid file for item ${i}, fileIndex: ${item.fileIndex}`,
-                        );
-                    }
                 });
-
-                // Log all form data
-                console.log("=== Final FormData ===");
-                for (const [key, value] of formData.entries()) {
-                    if (value instanceof File) {
-                        console.log(
-                            `${key}: File(${value.name}, ${value.size} bytes)`,
-                        );
-                    } else {
-                        console.log(`${key}:`, value);
-                    }
-                }
-
                 return async ({ result, update }) => {
                     loading = false;
-                    console.log("Server result:", result);
-
-                    if (result.type === "redirect") {
+                    if (result.type === "redirect")
                         window.location.href = result.location;
-                    } else {
-                        await update();
-                    }
+                    else await update();
                 };
             }}
-            class="space-y-4"
+            class="space-y-6"
         >
             <input type="hidden" name="item_count" value={items.length} />
 
-            <div class="grid gap-4">
+            <div class="grid gap-6">
                 {#each items as item, i}
                     <div
-                        class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6 relative group"
+                        class="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col md:flex-row gap-8 relative group hover:border-indigo-100 transition-colors"
+                        in:scale
                     >
                         <button
                             type="button"
                             on:click={() => removeItem(i)}
-                            class="absolute -top-2 -right-2 bg-red-100 text-red-600 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition shadow-sm hover:bg-red-200"
+                            class="absolute -top-3 -right-3 bg-rose-100 text-rose-600 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md hover:bg-rose-200"
                         >
-                            <Trash2 size={16} />
+                            <X size={16} />
                         </button>
 
-                        <!-- Preview & OCR Status -->
-                        <div class="w-full md:w-32 shrink-0">
+                        <div class="w-full md:w-36 shrink-0">
                             <button
                                 type="button"
-                                class="relative aspect-square md:aspect-[3/4] rounded-lg overflow-hidden border border-gray-100 bg-gray-50 w-full block cursor-zoom-in group/img"
+                                class="relative aspect-[3/4] rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 w-full block cursor-zoom-in group/img shadow-inner"
                                 on:click={() =>
                                     (selectedPreview = item.previewUrl)}
                             >
                                 <img
                                     src={item.previewUrl}
                                     alt="Slip"
-                                    class="w-full h-full object-cover transition duration-300 group-hover/img:scale-105"
+                                    class="w-full h-full object-cover transition duration-500 group-hover/img:scale-110"
                                 />
                                 {#if item.status === "scanning"}
                                     <div
-                                        class="absolute inset-0 bg-indigo-600/20 backdrop-blur-[2px] flex flex-col items-center justify-center text-white p-2 text-center"
+                                        class="absolute inset-0 bg-indigo-600/40 backdrop-blur-md flex flex-col items-center justify-center text-white p-2 text-center"
+                                        in:fade
                                     >
                                         <Loader2
-                                            class="animate-spin mb-1"
-                                            size={24}
+                                            class="animate-spin mb-2"
+                                            size={32}
                                         />
-                                        <span class="text-[10px] font-bold"
-                                            >Scanning...</span
+                                        <span
+                                            class="text-[10px] font-black uppercase tracking-widest"
+                                            >AI Scanning</span
                                         >
                                     </div>
                                 {/if}
                             </button>
                         </div>
 
-                        <!-- Data Fields -->
                         <div
-                            class="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                            class="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
                         >
                             <input
                                 type="hidden"
                                 name={`item_${i}_transaction_type`}
                                 value={item.transactionType}
                             />
-                            <!-- Files are appended via enhance callback from fileStore -->
 
-                            <!-- Amount -->
-                            <div class="md:col-span-1">
+                            <div class="lg:col-span-1">
                                 <label
-                                    class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1"
+                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
                                     >จำนวนเงิน</label
                                 >
                                 <div class="relative">
@@ -534,40 +403,41 @@
                                         name={`item_${i}_amount`}
                                         step="0.01"
                                         bind:value={item.amount}
-                                        class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-bold"
+                                        class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-lg font-black font-display tracking-tight {item.status ===
+                                        'scanning'
+                                            ? 'animate-pulse'
+                                            : ''}"
                                         placeholder="0.00"
                                     />
                                     <span
-                                        class="absolute right-3 top-2.5 text-gray-400 text-sm"
+                                        class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold"
                                         >฿</span
                                     >
                                 </div>
                             </div>
 
-                            <!-- Date -->
                             <div>
                                 <label
-                                    class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1"
+                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
                                     >วันที่</label
                                 >
                                 <input
                                     type="date"
                                     name={`item_${i}_date`}
                                     bind:value={item.date}
-                                    class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
                                 />
                             </div>
 
-                            <!-- Category -->
                             <div>
                                 <label
-                                    class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1"
+                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
                                     >หมวดหมู่</label
                                 >
                                 <select
                                     name={`item_${i}_category`}
                                     bind:value={item.category}
-                                    class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
                                 >
                                     <option value="">-- เลือก --</option>
                                     {#each expenseCategories as cat}
@@ -576,16 +446,15 @@
                                 </select>
                             </div>
 
-                            <!-- Project -->
                             <div>
                                 <label
-                                    class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1"
+                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
                                     >โปรเจค</label
                                 >
                                 <select
                                     name={`item_${i}_project_id`}
                                     bind:value={item.projectId}
-                                    class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
                                 >
                                     {#each data.projects as project}
                                         <option value={project.id}
@@ -595,16 +464,15 @@
                                 </select>
                             </div>
 
-                            <!-- Paid By -->
                             <div>
                                 <label
-                                    class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1"
+                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
                                     >ผู้จ่าย</label
                                 >
                                 <select
                                     name={`item_${i}_paid_by`}
                                     bind:value={item.paidBy}
-                                    class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
                                 >
                                     {#each data.profiles as profile}
                                         <option value={profile.id}
@@ -614,17 +482,16 @@
                                 </select>
                             </div>
 
-                            <!-- Description -->
                             <div class="md:col-span-full">
                                 <label
-                                    class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1"
-                                    >รายละเอียด/หมายเหตุ</label
+                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
+                                    >รายละเอียด</label
                                 >
                                 <input
                                     type="text"
                                     name={`item_${i}_description`}
                                     bind:value={item.description}
-                                    class="w-full border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
                                     placeholder="ใส่รายละเอียด..."
                                 />
                                 <input
@@ -638,27 +505,28 @@
                 {/each}
             </div>
 
-            <!-- Sticky Footer for Actions -->
             <div
-                class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] z-20"
+                class="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 p-6 z-30 shadow-[0_-20px_40px_rgba(0,0,0,0.05)]"
             >
-                <div class="max-w-3xl mx-auto flex gap-3">
+                <div class="max-w-3xl mx-auto flex gap-4">
                     <button
                         type="button"
                         on:click={() => (items = [])}
-                        class="px-6 py-3 border border-gray-200 rounded-xl text-gray-600 font-medium hover:bg-gray-50 transition"
+                        class="px-8 py-4 bg-slate-100 rounded-[22px] text-slate-600 font-black tracking-tight hover:bg-slate-200 transition active:scale-95 font-display min-w-[140px]"
                     >
                         ล้างทั้งหมด
                     </button>
                     <button
                         type="submit"
                         disabled={loading || isProcessing}
-                        class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                        class="flex-1 bg-indigo-600 text-white py-4 rounded-[22px] font-black tracking-tight hover:bg-indigo-700 transition shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 font-display"
                     >
                         {#if loading}
-                            <Loader2 class="animate-spin" size={20} /> กำลังบันทึก...
+                            <Loader2 class="animate-spin" size={24} />
+                            <span>กำลังบันทึก...</span>
                         {:else}
-                            <Plus size={20} /> บันทึกรวดเดียว {items.length} รายการ
+                            <Sparkles size={24} />
+                            <span>บันทึก {items.length} รายการ</span>
                         {/if}
                     </button>
                 </div>
@@ -669,14 +537,13 @@
 
 {#if selectedPreview}
     <div
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-sm"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-xl"
         on:click={() => (selectedPreview = null)}
-        on:keydown={(e) => e.key === "Escape" && (selectedPreview = null)}
-        role="button"
-        tabindex="0"
+        in:fade
+        out:fade
     >
         <button
-            class="absolute top-4 right-4 text-white/50 hover:text-white transition p-2 hover:bg-white/10 rounded-full"
+            class="absolute top-6 right-6 text-white/40 hover:text-white transition p-3 bg-white/10 rounded-2xl"
             on:click={() => (selectedPreview = null)}
         >
             <X size={32} />
@@ -684,14 +551,8 @@
         <img
             src={selectedPreview}
             alt="Full Preview"
-            class="max-w-full max-h-[95vh] object-contain rounded shadow-2xl"
+            class="max-w-full max-h-[90vh] object-contain rounded-3xl shadow-2xl"
+            in:scale
         />
     </div>
 {/if}
-
-<style>
-    /* Custom scrollbar for better feel */
-    :global(body) {
-        background-color: #f8fafc;
-    }
-</style>
