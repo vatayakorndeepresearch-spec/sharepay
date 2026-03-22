@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { resolveCategory } from '$lib/utils/expenseForm';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const { data: projects } = await supabase.from('projects').select('*').eq('is_active', true).order('name');
@@ -28,8 +29,13 @@ export const actions: Actions = {
                 const amount = parseFloat(formData.get(`item_${i}_amount`) as string);
                 const paidAt = formData.get(`item_${i}_date`) as string;
                 const description = formData.get(`item_${i}_description`) as string;
-                const category = (formData.get(`item_${i}_category`) as string) || 'Others';
                 const notes = formData.get(`item_${i}_notes`) as string || '';
+                const category = resolveCategory({
+                    transactionType: transactionType === 'income' ? 'income' : 'expense',
+                    category: formData.get(`item_${i}_category`) as string,
+                    description,
+                    notes
+                });
                 const isReimbursed = (formData.get(`item_${i}_is_reimbursed`) as string) === 'true';
                 const file = formData.get(`item_${i}_file`) as File;
 
@@ -87,7 +93,7 @@ export const actions: Actions = {
                     amount,
                     paid_at: paidAt || new Date().toISOString().split('T')[0],
                     description: description || 'บันทึกแบบกลุ่ม',
-                    category: category || 'อื่นๆ',
+                    category,
                     notes,
                     is_reimbursed: transactionType === 'income' ? true : isReimbursed,
                     proof_image_url: uploadedUrl

@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { resolveCategory } from '$lib/utils/expenseForm';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const { data: projects } = await supabase.from('projects').select('*').eq('is_active', true).order('name');
@@ -22,8 +23,13 @@ export const actions: Actions = {
         const amount = parseFloat(formData.get('amount') as string);
         const paidAt = formData.get('paid_at') as string;
         const description = formData.get('description') as string;
-        const category = (formData.get('category') as string) || 'Others';
         const notes = formData.get('notes') as string; // Added notes
+        const category = resolveCategory({
+            transactionType: transactionType === 'income' ? 'income' : 'expense',
+            category: formData.get('category') as string,
+            description,
+            notes
+        });
         const isReimbursed = formData.get('is_reimbursed') === 'on';
         if (!projectId || !paidBy || isNaN(amount) || amount <= 0 || !paidAt || !description) {
             return fail(400, { error: 'กรุณากรอกข้อมูลให้ครบถ้วน และจำนวนเงินต้องมากกว่า 0' });

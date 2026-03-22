@@ -97,6 +97,75 @@ export interface ExtractedExpenseData {
     highlightedFields: string[];
 }
 
+const categoryAliases: Record<string, string> = {
+    food: 'อาหาร',
+    dining: 'อาหาร',
+    travel: 'เดินทาง',
+    transport: 'เดินทาง',
+    shopping: 'ช้อปปิ้ง',
+    utility: 'ของใช้',
+    utilities: 'ของใช้',
+    housing: 'ค่าเช่าบ้าน',
+    rent: 'ค่าเช่าบ้าน',
+    phone: 'ค่าโทรศัพท์',
+    internet: 'ค่าอินเตอร์เน็ต',
+    insurance: 'ประกัน',
+    education: 'การศึกษา',
+    pet: 'สัตว์เลี้ยง',
+    donation: 'บริจาค/ทำบุญ',
+    gift: 'ของขวัญ',
+    refund: 'เงินคืน',
+    freelance: 'ฟรีแลนซ์',
+    investment: 'การลงทุน',
+    salary: 'เงินเดือน',
+    bonus: 'โบนัส'
+};
+
+const emptyCategoryValues = new Set([
+    '',
+    'others',
+    'other',
+    'misc',
+    'miscellaneous',
+    'uncategorized',
+    'unknown',
+    'อื่น',
+    'อื่นๆ',
+    'ไม่ระบุ',
+    'ไม่ระบุหมวดหมู่'
+]);
+
+const expenseCategoryRules: Array<{ category: string; keywords: string[] }> = [
+    { category: 'ค่าน้ำมัน', keywords: ['น้ำมัน', 'fuel', 'ptt', 'บางจาก', 'shell', 'esso', 'caltex'] },
+    { category: 'ค่าชาร์จรถ', keywords: ['ชาร์จรถ', 'ev', 'charge', 'charging'] },
+    { category: 'ค่าอินเตอร์เน็ต', keywords: ['internet', 'wifi', 'fiber', 'เน็ตบ้าน', 'อินเตอร์เน็ต', 'broadband'] },
+    { category: 'ค่าโทรศัพท์', keywords: ['โทรศัพท์', 'มือถือ', 'ais', 'dtac', 'true move', 'truemove', 'sim'] },
+    { category: 'ค่าไฟ', keywords: ['ไฟฟ้า', 'ค่าไฟ', 'electric', 'mea'] },
+    { category: 'ค่าน้ำ', keywords: ['ค่าน้ำ', 'น้ำประปา', 'water bill'] },
+    { category: 'ค่าเช่าบ้าน', keywords: ['เช่าบ้าน', 'ค่าเช่า', 'rent', 'condo', 'apartment'] },
+    { category: 'ค่าสมาชิก/Sub', keywords: ['netflix', 'spotify', 'youtube premium', 'membership', 'subscription', 'sub'] },
+    { category: 'สุขภาพ', keywords: ['ยา', 'หมอ', 'clinic', 'hospital', 'โรงพยาบาล', 'คลินิก', 'doctor', 'pharmacy'] },
+    { category: 'การศึกษา', keywords: ['เรียน', 'course', 'tuition', 'หนังสือเรียน', 'workshop', 'class'] },
+    { category: 'สัตว์เลี้ยง', keywords: ['แมว', 'หมา', 'สัตว์เลี้ยง', 'pet', 'vet', 'อาหารสัตว์'] },
+    { category: 'บริจาค/ทำบุญ', keywords: ['บริจาค', 'ทำบุญ', 'donate', 'donation', 'temple', 'วัด'] },
+    { category: 'ประกัน', keywords: ['ประกัน', 'insurance', 'insured'] },
+    { category: 'ที่พัก', keywords: ['โรงแรม', 'hotel', 'resort', 'ที่พัก', 'booking', 'airbnb'] },
+    { category: 'เดินทาง', keywords: ['grab', 'bolt', 'taxi', 'mrt', 'bts', 'ทางด่วน', 'รถไฟ', 'เดินทาง', 'uber', 'parking'] },
+    { category: 'อาหาร', keywords: ['อาหาร', 'ข้าว', 'กาแฟ', 'coffee', 'cafe', 'restaurant', 'grabfood', 'lineman', 'ชานม', 'กิน', 'สุกี้', 'ชาบู'] },
+    { category: 'ช้อปปิ้ง', keywords: ['shopee', 'lazada', 'shopping', 'เสื้อ', 'รองเท้า', 'cosmetic', 'ของแต่งตัว'] },
+    { category: 'ของใช้', keywords: ['ของใช้', 'ของเข้าบ้าน', 'supermarket', 'lotus', 'big c', '7-11', 'เซเว่น', 'grocer'] },
+    { category: 'บันเทิง', keywords: ['หนัง', 'movie', 'concert', 'เกม', 'game', 'karaoke', 'สวนสนุก', 'entertainment'] }
+];
+
+const incomeCategoryRules: Array<{ category: string; keywords: string[] }> = [
+    { category: 'เงินเดือน', keywords: ['เงินเดือน', 'salary', 'payroll'] },
+    { category: 'โบนัส', keywords: ['โบนัส', 'bonus'] },
+    { category: 'ฟรีแลนซ์', keywords: ['freelance', 'ฟรีแลนซ์', 'commission', 'ค่าจ้าง'] },
+    { category: 'การลงทุน', keywords: ['หุ้น', 'dividend', 'ลงทุน', 'investment', 'interest', 'ดอกเบี้ย'] },
+    { category: 'เงินคืน', keywords: ['refund', 'cashback', 'คืนเงิน', 'rebate'] },
+    { category: 'ของขวัญ', keywords: ['gift', 'ของขวัญ', 'รับซอง'] }
+];
+
 export function getTodayLocalDate() {
     const now = new Date();
     const year = now.getFullYear();
@@ -107,6 +176,54 @@ export function getTodayLocalDate() {
 
 export function getCategories(type: TransactionType) {
     return type === 'income' ? [...incomeCategories] : [...expenseCategories];
+}
+
+export function normalizeCategoryInput(category: string | null | undefined) {
+    const trimmed = category?.trim() ?? '';
+    if (!trimmed) return '';
+
+    const normalizedKey = trimmed.toLowerCase();
+    if (emptyCategoryValues.has(normalizedKey)) {
+        return '';
+    }
+
+    const availableCategories = [...expenseCategories, ...incomeCategories];
+    const directMatch = availableCategories.find((item) => item.toLowerCase() === normalizedKey);
+    if (directMatch) return directMatch;
+
+    return categoryAliases[normalizedKey] || trimmed;
+}
+
+export function inferCategoryFromText(
+    transactionType: TransactionType,
+    description?: string | null,
+    notes?: string | null
+) {
+    const haystack = `${description || ''} ${notes || ''}`.toLowerCase().trim();
+    if (!haystack) return '';
+
+    const rules = transactionType === 'income' ? incomeCategoryRules : expenseCategoryRules;
+    const matchedRule = rules.find((rule) => rule.keywords.some((keyword) => haystack.includes(keyword)));
+    return matchedRule?.category || '';
+}
+
+export function resolveCategory(input: {
+    transactionType: TransactionType;
+    category?: string | null;
+    description?: string | null;
+    notes?: string | null;
+}) {
+    const normalized = normalizeCategoryInput(input.category);
+    if (normalized) {
+        return normalized;
+    }
+
+    const inferred = inferCategoryFromText(input.transactionType, input.description, input.notes);
+    if (inferred) {
+        return inferred;
+    }
+
+    return 'ไม่ระบุหมวดหมู่';
 }
 
 function parseAmount(lines: string[]) {

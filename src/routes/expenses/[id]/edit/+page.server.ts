@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { resolveCategory } from '$lib/utils/expenseForm';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, parent }) => {
     const { id } = params;
@@ -42,8 +43,13 @@ export const actions: Actions = {
         const amount = parseFloat(formData.get('amount') as string);
         const paidAt = formData.get('paid_at') as string;
         const description = formData.get('description') as string;
-        const category = (formData.get('category') as string) || 'Others';
         const notes = formData.get('notes') as string;
+        const category = resolveCategory({
+            transactionType: transactionType === 'income' ? 'income' : 'expense',
+            category: formData.get('category') as string,
+            description,
+            notes
+        });
         const files = formData.getAll('proof_images') as File[];
         let uploadedUrls: string[] = [];
 
