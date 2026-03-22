@@ -15,6 +15,7 @@
     export let form;
 
     let loading = false;
+    const formError = form?.error as string | undefined;
 </script>
 
 <div class="max-w-md mx-auto space-y-8 pb-24">
@@ -152,13 +153,12 @@
                                 />
                             </div>
 
-                            {#if form?.error}
+                            {#if formError}
                                 <div
                                     class="bg-rose-50 text-rose-600 p-4 rounded-2xl text-xs font-bold border border-rose-100 flex items-center gap-2"
-                                    in:shake
                                 >
                                     <AlertTriangle size={16} />
-                                    {form.error}
+                                    {formError}
                                 </div>
                             {/if}
 
@@ -178,12 +178,12 @@
                     </div>
                 {:else}
                     <form method="POST" action="?/enroll" use:enhance>
-                        {#if form?.error}
+                        {#if formError}
                             <div
                                 class="bg-rose-50 text-rose-600 p-4 rounded-2xl text-xs font-bold border border-rose-100 flex items-center gap-2 mb-4"
                             >
                                 <AlertTriangle size={16} />
-                                {form.error}
+                                {formError}
                             </div>
                         {/if}
                         <button

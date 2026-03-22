@@ -1,32 +1,30 @@
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
-    const projectId = url.searchParams.get('projectId');
+    const projectId = url.searchParams.get('projectId') || 'all';
 
-    // Fetch active projects for filter
     const { data: projects } = await supabase
         .from('projects')
         .select('id, name')
         .eq('is_active', true)
         .order('name');
 
-    // Build query
     let query = supabase
         .from('expenses')
         .select(`
             amount,
             category,
             paid_at,
+            transaction_type,
             paid_by (display_name)
         `)
         .order('paid_at', { ascending: true });
 
-    // Apply filter if selected
-    if (projectId && projectId !== 'all') {
+    if (projectId !== 'all') {
         query = query.eq('project_id', projectId);
     }
 
-    const { data: expenses, error } = await query;
+    const { data: records, error } = await query;
 
     if (error) {
         console.error('Error fetching expenses:', error);
@@ -34,75 +32,76 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
             categoryData: { labels: [], datasets: [] },
             monthlyData: { labels: [], datasets: [] },
             topSpender: { name: '-', amount: 0 },
+            topCategory: { name: '-', amount: 0 },
             totalExpense: 0,
+            thisMonthExpense: 0,
             projects: [],
             selectedProjectId: 'all'
         };
     }
 
-    // 1. Aggregate by Category
+    const expenses = (records || []).filter((record) => record.transaction_type === 'expense');
+    const now = new Date();
+
     const categoryMap = new Map<string, number>();
-    expenses.forEach(e => {
-        const current = categoryMap.get(e.category) || 0;
-        categoryMap.set(e.category, current + Number(e.amount));
-    });
-
-    const categoryLabels = Array.from(categoryMap.keys());
-    const categoryValues = Array.from(categoryMap.values());
-
-    // 2. Aggregate by Month (Last 6 months)
     const monthlyMap = new Map<string, number>();
-    expenses.forEach(e => {
-        const date = new Date(e.paid_at);
-        const monthYear = date.toLocaleString('th-TH', { month: 'short', year: '2-digit' });
-        const current = monthlyMap.get(monthYear) || 0;
-        monthlyMap.set(monthYear, current + Number(e.amount));
-    });
-
-    const monthlyLabels = Array.from(monthlyMap.keys());
-    const monthlyValues = Array.from(monthlyMap.values());
-
-    // 3. Top Spender
     const spenderMap = new Map<string, number>();
-    expenses.forEach(e => {
-        // Handle paid_by being either an object or an array depending on Supabase type inference
-        const paidBy = Array.isArray(e.paid_by) ? e.paid_by[0] : e.paid_by;
-        const name = paidBy?.display_name || 'Unknown';
-        const current = spenderMap.get(name) || 0;
-        spenderMap.set(name, current + Number(e.amount));
-    });
 
-    let topSpender = { name: '-', amount: 0 };
-    spenderMap.forEach((amount, name) => {
-        if (amount > topSpender.amount) {
-            topSpender = { name, amount };
+    let totalExpense = 0;
+    let thisMonthExpense = 0;
+
+    expenses.forEach((record) => {
+        const amount = Number(record.amount);
+        totalExpense += amount;
+
+        const date = new Date(record.paid_at);
+        if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) {
+            thisMonthExpense += amount;
         }
+
+        const category = record.category || 'ไม่ระบุหมวดหมู่';
+        categoryMap.set(category, (categoryMap.get(category) || 0) + amount);
+
+        const monthYear = date.toLocaleString('th-TH', { month: 'short', year: '2-digit' });
+        monthlyMap.set(monthYear, (monthlyMap.get(monthYear) || 0) + amount);
+
+        const paidBy = Array.isArray(record.paid_by) ? record.paid_by[0] : record.paid_by;
+        const name = paidBy?.display_name || 'Unknown';
+        spenderMap.set(name, (spenderMap.get(name) || 0) + amount);
     });
 
-    const totalExpense = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    const sortedCategories = Array.from(categoryMap.entries()).sort((a, b) => b[1] - a[1]);
+    const topCategory = sortedCategories[0]
+        ? { name: sortedCategories[0][0], amount: sortedCategories[0][1] }
+        : { name: '-', amount: 0 };
+
+    const topSpenderEntry = Array.from(spenderMap.entries()).sort((a, b) => b[1] - a[1])[0];
+    const topSpender = topSpenderEntry
+        ? { name: topSpenderEntry[0], amount: topSpenderEntry[1] }
+        : { name: '-', amount: 0 };
 
     return {
         categoryData: {
-            labels: categoryLabels,
+            labels: sortedCategories.map(([label]) => label),
             datasets: [{
-                data: categoryValues,
-                backgroundColor: [
-                    '#4f46e5', '#ec4899', '#10b981', '#f59e0b', '#6366f1', '#8b5cf6'
-                ]
+                data: sortedCategories.map(([, value]) => value),
+                backgroundColor: ['#4f46e5', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#0f172a']
             }]
         },
         monthlyData: {
-            labels: monthlyLabels,
+            labels: Array.from(monthlyMap.keys()),
             datasets: [{
                 label: 'รายจ่ายรายเดือน',
-                data: monthlyValues,
+                data: Array.from(monthlyMap.values()),
                 backgroundColor: '#4f46e5',
-                borderRadius: 4
+                borderRadius: 8
             }]
         },
         topSpender,
+        topCategory,
         totalExpense,
+        thisMonthExpense,
         projects: projects || [],
-        selectedProjectId: projectId || 'all'
+        selectedProjectId: projectId
     };
 };

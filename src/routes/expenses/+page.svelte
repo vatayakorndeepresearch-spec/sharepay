@@ -1,328 +1,339 @@
 <script lang="ts">
+    import { goto } from "$app/navigation";
+    import { page } from "$app/stores";
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import { formatDate } from "$lib/utils/formatDate";
     import {
-        FileText,
-        CheckCircle,
-        XCircle,
-        Filter,
-        ScanLine,
-        Plus,
-        CirclePlus,
+        CalendarDays,
+        CheckCircle2,
         ChevronRight,
-        Calendar,
+        Funnel,
         Receipt,
-        Banknote,
-        Shapes,
-        Sparkles,
+        SlidersHorizontal,
+        TrendingDown,
+        TrendingUp,
+        X,
     } from "lucide-svelte";
-    import { goto } from "$app/navigation";
-    import { page } from "$app/stores";
-    import { fade, slide, fly, scale } from "svelte/transition";
+    import { fade, fly } from "svelte/transition";
 
     export let data;
-    $: ({ expenses, projects, filters } = data);
 
-    function handleFilterChange(event: Event) {
-        const select = event.target as HTMLSelectElement;
-        const id = select.id;
-        const value = select.value;
+    let showAdvancedFilters = false;
 
+    type ExpenseRecord = (typeof data.expenses)[number];
+
+    function updateQuery(next: Record<string, string>) {
         const query = new URLSearchParams($page.url.searchParams);
-        query.set(id, value);
-        goto(`?${query.toString()}`);
+
+        Object.entries(next).forEach(([key, value]) => {
+            if (!value || value === "all") {
+                query.delete(key);
+            } else {
+                query.set(key, value);
+            }
+        });
+
+        goto(query.size ? `?${query.toString()}` : "/expenses");
     }
 
-    let showAddMenu = false;
-    let menuRef: HTMLElement;
-
-    function toggleMenu() {
-        showAddMenu = !showAddMenu;
-    }
-
-    function closeMenu(event: MouseEvent) {
-        if (menuRef && !menuRef.contains(event.target as Node)) {
-            showAddMenu = false;
+    function applyQuickFilter(mode: "all" | "unpaid" | "paid" | "income" | "expense") {
+        if (mode === "all") {
+            updateQuery({ status: "all", type: "all" });
+            return;
         }
+
+        if (mode === "unpaid" || mode === "paid") {
+            updateQuery({ status: mode, type: "expense" });
+            return;
+        }
+
+        updateQuery({ status: "all", type: mode });
     }
+
+    function getQuickMode() {
+        if (data.filters.status === "unpaid" && data.filters.type === "expense") return "unpaid";
+        if (data.filters.status === "paid" && data.filters.type === "expense") return "paid";
+        if (data.filters.type === "income") return "income";
+        if (data.filters.type === "expense" && data.filters.status === "all") return "expense";
+        return "all";
+    }
+
+    function groupedExpenses(expenses: ExpenseRecord[]) {
+        const groups = new Map<string, ExpenseRecord[]>();
+        for (const expense of expenses) {
+            const key = expense.paid_at;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)?.push(expense);
+        }
+
+        return Array.from(groups.entries()).map(([date, items]) => ({
+            date,
+            label: new Date(date).toLocaleDateString("th-TH", {
+                weekday: "short",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+            }),
+            items,
+        }));
+    }
+
+    $: activeQuickMode = getQuickMode();
+    $: dateGroups = groupedExpenses(data.expenses);
+    $: selectedProjectName =
+        data.filters.project === "all"
+            ? "ทุกโปรเจค"
+            : data.projects.find((project) => project.id === data.filters.project)?.name || "ทุกโปรเจค";
 </script>
 
-<svelte:window on:click={closeMenu} />
-
-<div class="space-y-6 pb-20">
-    <div class="flex justify-between items-end mb-4 px-1">
+<div class="page-shell">
+    <header class="flex items-start justify-between gap-4 px-1">
         <div>
-            <h1
-                class="text-3xl font-black text-slate-900 font-display tracking-tight"
-            >
-                รายการทั้งหมด
-            </h1>
-            <p
-                class="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1"
-            >
-                ประวัติการทำรายการของคุณ
-            </p>
+            <p class="eyebrow">History</p>
+            <h1 class="text-3xl font-black text-slate-900 font-display tracking-tight">รายการทั้งหมด</h1>
+            <p class="mt-1 text-sm text-slate-500">ดูย้อนหลังตามวัน แล้วค่อยเปิดรายการที่ต้องจัดการต่อ</p>
         </div>
-
-        <div class="relative" bind:this={menuRef}>
-            <button
-                on:click|stopPropagation={toggleMenu}
-                class="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-black font-display tracking-tight hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 text-sm flex items-center gap-2 active:scale-95"
-            >
-                <Plus size={20} /> เพิ่มรายการ
-            </button>
-
-            {#if showAddMenu}
-                <div
-                    class="absolute right-0 mt-3 w-56 bg-white/90 backdrop-blur-xl rounded-[24px] shadow-2xl border border-slate-100 py-2 z-50 overflow-hidden"
-                    in:fly={{ y: 10, duration: 200 }}
-                    out:fade={{ duration: 150 }}
-                >
-                    <a
-                        href="/expenses/new"
-                        class="flex items-center gap-4 px-4 py-4 text-sm text-slate-700 hover:bg-indigo-50 transition-colors group"
-                        on:click={() => (showAddMenu = false)}
-                    >
-                        <div
-                            class="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shadow-sm"
-                        >
-                            <Plus size={20} />
-                        </div>
-                        <div>
-                            <div class="font-bold">รายการเดียว</div>
-                            <div
-                                class="text-[10px] text-slate-400 uppercase font-bold tracking-tight"
-                            >
-                                Manual Entry
-                            </div>
-                        </div>
-                    </a>
-                    <div class="mx-4 border-t border-slate-50"></div>
-                    <a
-                        href="/expenses/bulk"
-                        class="flex items-center gap-4 px-4 py-4 text-sm text-slate-700 hover:bg-emerald-50 transition-colors group"
-                        on:click={() => (showAddMenu = false)}
-                    >
-                        <div
-                            class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-sm"
-                        >
-                            <Sparkles size={18} />
-                        </div>
-                        <div>
-                            <div class="font-bold">หลายรายการ</div>
-                            <div
-                                class="text-[10px] text-slate-400 uppercase font-bold tracking-tight"
-                            >
-                                AI Slip Scan
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            {/if}
-        </div>
-    </div>
-
-    <!-- Filters -->
-    <div
-        class="bg-white/70 backdrop-blur-md p-5 rounded-[28px] border border-white shadow-sm space-y-4 premium-shadow"
-    >
-        <div
-            class="flex items-center gap-2 text-slate-900 font-bold text-xs uppercase tracking-widest px-1"
+        <button
+            type="button"
+            class="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600"
+            aria-label="Open advanced filters"
+            on:click={() => (showAdvancedFilters = true)}
         >
-            <Filter size={14} class="text-indigo-600" /> ตัวกรองข้อมูล
-        </div>
-        <div class="grid grid-cols-3 gap-4">
-            <div class="space-y-1.5">
-                <label
-                    for="type"
-                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter px-1"
-                    >ประเภท</label
-                >
-                <select
-                    id="type"
-                    value={filters.type}
-                    on:change={handleFilterChange}
-                    class="w-full text-xs font-bold bg-slate-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-3 appearance-none"
-                >
-                    <option value="all">ทั้งหมด</option>
-                    <option value="income">รายรับ</option>
-                    <option value="expense">รายจ่าย</option>
-                </select>
+            <SlidersHorizontal size={18} />
+        </button>
+    </header>
+
+    <section class="surface-card-soft p-5">
+        <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+                <div class="text-sm font-semibold text-slate-900">
+                    {data.summaryTotals.filteredCount} รายการ
+                </div>
+                <p class="text-sm text-slate-500">
+                    รวมยอดในมุมมองนี้ {formatCurrency(data.summaryTotals.filteredAmount)}
+                </p>
             </div>
-            <div class="space-y-1.5">
-                <label
-                    for="project"
-                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter px-1"
-                    >โปรเจค</label
-                >
+            <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                {selectedProjectName}
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+            <button
+                type="button"
+                class={`filter-chip ${activeQuickMode === "all" ? "filter-chip-active" : ""}`}
+                on:click={() => applyQuickFilter("all")}
+            >
+                ทั้งหมด
+                <span class="text-xs text-slate-400">{data.summaryCounts.all}</span>
+            </button>
+            <button
+                type="button"
+                class={`filter-chip ${activeQuickMode === "unpaid" ? "filter-chip-active" : ""}`}
+                on:click={() => applyQuickFilter("unpaid")}
+            >
+                ยังไม่เคลียร์
+                <span class="text-xs text-slate-400">{data.summaryCounts.unpaid}</span>
+            </button>
+            <button
+                type="button"
+                class={`filter-chip ${activeQuickMode === "paid" ? "filter-chip-active" : ""}`}
+                on:click={() => applyQuickFilter("paid")}
+            >
+                เคลียร์แล้ว
+                <span class="text-xs text-slate-400">{data.summaryCounts.paid}</span>
+            </button>
+            <button
+                type="button"
+                class={`filter-chip ${activeQuickMode === "income" ? "filter-chip-active" : ""}`}
+                on:click={() => applyQuickFilter("income")}
+            >
+                รายรับ
+                <span class="text-xs text-slate-400">{data.summaryCounts.income}</span>
+            </button>
+            <button
+                type="button"
+                class={`filter-chip ${activeQuickMode === "expense" ? "filter-chip-active" : ""}`}
+                on:click={() => applyQuickFilter("expense")}
+            >
+                รายจ่าย
+                <span class="text-xs text-slate-400">{data.summaryCounts.expense}</span>
+            </button>
+        </div>
+    </section>
+
+    {#if data.expenses.length === 0}
+        <section class="surface-card p-8 text-center">
+            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
+                <Receipt size={26} />
+            </div>
+            <h2 class="text-xl font-black text-slate-900 font-display">ไม่พบรายการในมุมมองนี้</h2>
+            <p class="mt-2 text-sm text-slate-500">
+                ลองเปลี่ยน filter หรือเริ่มบันทึกรายการใหม่จากปุ่มบันทึกด้านล่าง
+            </p>
+            <a href="/expenses/new" class="mt-5 inline-flex rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">
+                บันทึกรายการใหม่
+            </a>
+        </section>
+    {:else}
+        <section class="space-y-5">
+            {#each dateGroups as group}
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2 px-1 text-sm font-semibold text-slate-500">
+                        <CalendarDays size={15} />
+                        {group.label}
+                    </div>
+
+                    <div class="grid gap-3">
+                        {#each group.items as expense}
+                            <a href={`/expenses/${expense.id}`} class="surface-card flex items-center justify-between gap-4 p-4">
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <div
+                                        class={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                                            expense.transaction_type === "income"
+                                                ? "bg-emerald-50 text-emerald-600"
+                                                : "bg-slate-100 text-slate-700"
+                                        }`}
+                                    >
+                                        {#if expense.transaction_type === "income"}
+                                            <TrendingUp size={18} />
+                                        {:else}
+                                            <TrendingDown size={18} />
+                                        {/if}
+                                    </div>
+
+                                    <div class="min-w-0">
+                                        <div class="truncate text-sm font-bold text-slate-900">{expense.description}</div>
+                                        <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                                            <span>{formatDate(expense.paid_at)}</span>
+                                            <span>•</span>
+                                            <span>{expense.profiles?.display_name || "ไม่ระบุผู้จ่าย"}</span>
+                                            <span>•</span>
+                                            <span>{expense.projects?.name}</span>
+                                        </div>
+                                        {#if expense.transaction_type === "expense"}
+                                            <div class="mt-2">
+                                                <span
+                                                    class={`status-chip ${
+                                                        expense.is_reimbursed
+                                                            ? "bg-emerald-50 text-emerald-700"
+                                                            : "bg-amber-50 text-amber-700"
+                                                    }`}
+                                                >
+                                                    <CheckCircle2 size={12} />
+                                                    {expense.is_reimbursed ? "เคลียร์แล้ว" : "ยังไม่เคลียร์"}
+                                                </span>
+                                            </div>
+                                        {/if}
+                                    </div>
+                                </div>
+
+                                <div class="shrink-0 text-right">
+                                    <div
+                                        class={`text-base font-black font-display ${
+                                            expense.transaction_type === "income" ? "text-emerald-600" : "text-slate-900"
+                                        }`}
+                                    >
+                                        {expense.transaction_type === "income" ? "+" : ""}{formatCurrency(expense.amount)}
+                                    </div>
+                                    <div class="mt-2 flex items-center justify-end gap-1 text-xs font-semibold text-slate-400">
+                                        เปิดดู
+                                        <ChevronRight size={14} />
+                                    </div>
+                                </div>
+                            </a>
+                        {/each}
+                    </div>
+                </div>
+            {/each}
+        </section>
+    {/if}
+</div>
+
+{#if showAdvancedFilters}
+    <button
+        type="button"
+        class="fixed inset-0 z-[60] bg-slate-950/35 backdrop-blur-sm"
+        aria-label="Close advanced filters"
+        on:click={() => (showAdvancedFilters = false)}
+        in:fade
+        out:fade
+    ></button>
+
+    <div class="sheet-panel max-w-md mx-auto" in:fly={{ y: 20, duration: 160 }} out:fly={{ y: 20, duration: 120 }}>
+        <div class="mb-5 flex items-center justify-between">
+            <div>
+                <p class="eyebrow">Advanced filters</p>
+                <h2 class="text-xl font-black text-slate-900 font-display">กรองรายการ</h2>
+            </div>
+            <button
+                type="button"
+                class="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-500"
+                aria-label="Close advanced filters"
+                on:click={() => (showAdvancedFilters = false)}
+            >
+                <X size={18} />
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="field-label" for="project-filter">โปรเจค</label>
                 <select
-                    id="project"
-                    value={filters.project}
-                    on:change={handleFilterChange}
-                    class="w-full text-xs font-bold bg-slate-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-3 appearance-none"
+                    id="project-filter"
+                    class="field-input"
+                    value={data.filters.project}
+                    on:change={(event) =>
+                        updateQuery({ project: (event.currentTarget as HTMLSelectElement).value })}
                 >
-                    <option value="all">ทั้งหมด</option>
-                    {#each projects as project}
+                    <option value="all">ทุกโปรเจค</option>
+                    {#each data.projects as project}
                         <option value={project.id}>{project.name}</option>
                     {/each}
                 </select>
             </div>
-            <div class="space-y-1.5">
-                <label
-                    for="status"
-                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter px-1"
-                    >สถานะ</label
-                >
+
+            <div>
+                <label class="field-label" for="type-filter">ประเภท</label>
                 <select
-                    id="status"
-                    value={filters.status}
-                    on:change={handleFilterChange}
-                    class="w-full text-xs font-bold bg-slate-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-3 appearance-none"
+                    id="type-filter"
+                    class="field-input"
+                    value={data.filters.type}
+                    on:change={(event) =>
+                        updateQuery({ type: (event.currentTarget as HTMLSelectElement).value })}
+                >
+                    <option value="all">ทั้งหมด</option>
+                    <option value="expense">รายจ่าย</option>
+                    <option value="income">รายรับ</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="field-label" for="status-filter">สถานะ</label>
+                <select
+                    id="status-filter"
+                    class="field-input"
+                    value={data.filters.status}
+                    on:change={(event) =>
+                        updateQuery({ status: (event.currentTarget as HTMLSelectElement).value })}
                 >
                     <option value="all">ทั้งหมด</option>
                     <option value="unpaid">ยังไม่เคลียร์</option>
                     <option value="paid">เคลียร์แล้ว</option>
                 </select>
             </div>
+
+            <button
+                type="button"
+                class="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-rose-600"
+                on:click={() => {
+                    showAdvancedFilters = false;
+                    goto("/expenses");
+                }}
+            >
+                <Funnel size={15} />
+                ล้างตัวกรองทั้งหมด
+            </button>
         </div>
     </div>
-
-    <!-- List -->
-    <div class="space-y-4">
-        {#if expenses.length === 0}
-            <div
-                class="bg-white rounded-[32px] p-16 text-center premium-shadow border border-slate-100"
-                in:fade
-            >
-                <div
-                    class="w-20 h-20 bg-slate-50 rounded-[28px] flex items-center justify-center mx-auto mb-6 text-slate-300"
-                >
-                    <Receipt size={40} />
-                </div>
-                <h3 class="text-xl font-black text-slate-900 mb-2 font-display">
-                    ไม่พบรายการ
-                </h3>
-                <p
-                    class="text-slate-400 mb-8 max-w-[240px] mx-auto text-sm font-medium"
-                >
-                    ลองเปลี่ยนตัวกรอง หรือเริ่มบันทึกรายการใหม่กันเลย
-                </p>
-                <div class="flex flex-col gap-3 max-w-[200px] mx-auto">
-                    <a
-                        href="/expenses/new"
-                        class="bg-indigo-600 text-white py-3.5 rounded-2xl font-black tracking-tight hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 active:scale-95 font-display text-sm"
-                    >
-                        บันทึกรายการใหม่
-                    </a>
-                </div>
-            </div>
-        {:else}
-            <div class="grid gap-3">
-                {#each expenses as expense, i}
-                    <a
-                        href="/expenses/{expense.id}"
-                        class="group block bg-white hover:bg-slate-50 p-4 rounded-[24px] border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-md hover:scale-[1.01] active:scale-95"
-                        in:fly={{ y: 20, duration: 400, delay: i * 50 }}
-                    >
-                        <div class="flex justify-between items-center mb-3">
-                            <div class="flex items-center gap-3">
-                                <div
-                                    class="w-10 h-10 rounded-2xl flex items-center justify-center transition-colors {expense.transaction_type ===
-                                    'income'
-                                        ? 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white'
-                                        : 'bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white'}"
-                                >
-                                    {#if expense.transaction_type === "income"}
-                                        <Banknote size={20} />
-                                    {:else}
-                                        <Receipt size={20} />
-                                    {/if}
-                                </div>
-                                <div>
-                                    <div
-                                        class="font-bold text-slate-900 text-md"
-                                    >
-                                        {expense.description}
-                                    </div>
-                                    <div
-                                        class="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-0.5"
-                                    >
-                                        <Calendar size={12} />
-                                        {formatDate(expense.paid_at)}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <div
-                                    class="text-lg font-black font-display tracking-tight {expense.is_reimbursed &&
-                                    expense.transaction_type !== 'income'
-                                        ? 'text-slate-300 line-through'
-                                        : expense.transaction_type === 'income'
-                                          ? 'text-emerald-600'
-                                          : 'text-slate-900'}"
-                                >
-                                    {expense.transaction_type === "income"
-                                        ? "+"
-                                        : ""}{formatCurrency(expense.amount)}
-                                </div>
-                                {#if expense.transaction_type !== "income"}
-                                    <div class="mt-1">
-                                        {#if expense.is_reimbursed}
-                                            <span
-                                                class="text-[9px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
-                                                ><CheckCircle
-                                                    size={10}
-                                                    strokeWidth={3}
-                                                /> PAID</span
-                                            >
-                                        {:else}
-                                            <span
-                                                class="text-[9px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
-                                                ><XCircle
-                                                    size={10}
-                                                    strokeWidth={3}
-                                                /> PENDING</span
-                                            >
-                                        {/if}
-                                    </div>
-                                {/if}
-                            </div>
-                        </div>
-
-                        <div
-                            class="flex justify-between items-center pt-3 border-t border-slate-50"
-                        >
-                            <div class="flex items-center gap-1.5">
-                                <div
-                                    class="flex items-center gap-1 bg-slate-50 text-slate-500 px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-100/50"
-                                >
-                                    <Shapes size={10} />
-                                    {expense.projects?.name}
-                                </div>
-                                {#if expense.category}
-                                    <div
-                                        class="bg-indigo-50/50 text-indigo-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-indigo-100/30"
-                                    >
-                                        {expense.category}
-                                    </div>
-                                {/if}
-                                {#if expense.proof_image_url}
-                                    <div
-                                        class="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors"
-                                    >
-                                        <FileText size={12} />
-                                    </div>
-                                {/if}
-                            </div>
-
-                            <ChevronRight
-                                size={16}
-                                class="text-slate-300 group-hover:text-indigo-600 transition-colors group-hover:translate-x-1 duration-300"
-                            />
-                        </div>
-                    </a>
-                {/each}
-            </div>
-        {/if}
-    </div>
-</div>
+{/if}

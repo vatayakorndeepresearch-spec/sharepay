@@ -3,12 +3,10 @@ import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const { data: projects } = await supabase.from('projects').select('*').eq('is_active', true).order('name');
-    const { data: profiles } = await supabase.from('profiles').select('*').order('display_name');
     const { currentProfileId, currentUser } = await parent();
 
     return {
         projects: projects || [],
-        profiles: profiles || [],
         currentProfileId,
         currentUser
     };

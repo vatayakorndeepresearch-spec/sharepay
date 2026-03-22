@@ -5,11 +5,13 @@
 @layer base {
   :root {
     --brand-primary: 79, 70, 229;
-    --brand-secondary: 147, 51, 234;
+    --brand-secondary: 59, 130, 246;
     --brand-success: 16, 185, 129;
+    --brand-warning: 245, 158, 11;
     --brand-danger: 239, 68, 68;
     --brand-surface: 255, 255, 255;
     --brand-background: 248, 250, 252;
+    --brand-border: 226, 232, 240;
   }
 
   body {
@@ -24,12 +26,79 @@
 }
 
 @layer components {
+  .app-shell {
+    @apply min-h-screen bg-slate-50 text-slate-900;
+    background-image:
+      radial-gradient(circle at top right, rgba(79, 70, 229, 0.08), transparent 32%),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 1));
+  }
+
+  .page-shell {
+    @apply space-y-6 pb-24;
+  }
+
+  .surface-card {
+    @apply bg-white rounded-[28px] border border-slate-200 shadow-sm;
+  }
+
+  .surface-card-soft {
+    @apply bg-white/80 backdrop-blur-md rounded-[28px] border border-white shadow-sm;
+  }
+
+  .section-label {
+    @apply text-[11px] font-semibold text-slate-500;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold text-slate-500;
+  }
+
+  .field-label {
+    @apply block text-[13px] font-semibold text-slate-600 mb-2;
+  }
+
+  .field-input {
+    @apply w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100;
+  }
+
+  .field-input-hero {
+    @apply w-full rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-3xl font-black text-slate-900 placeholder:text-slate-300 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  .identity-chip {
+    @apply flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700;
+  }
+
+  .filter-chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors;
+  }
+
+  .filter-chip-active {
+    @apply border-indigo-200 bg-indigo-50 text-indigo-700;
+  }
+
+  .status-chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold;
+  }
+
+  .sticky-action-bar {
+    @apply fixed left-0 right-0 z-40 border-t border-slate-200 bg-white/90 px-4 pt-3 shadow-[0_-16px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 74px);
+    padding-bottom: 16px;
+  }
+
+  .sheet-panel {
+    @apply fixed inset-x-0 bottom-0 z-[70] rounded-t-[32px] border border-slate-200 bg-white px-5 pt-4 pb-6 shadow-[0_-20px_60px_rgba(15,23,42,0.18)];
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  }
+
   .glass-card {
     @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
   }
 
   .premium-shadow {
-    box-shadow: 0 10px 30px -10px rgba(79, 70, 229, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 14px 40px -18px rgba(79, 70, 229, 0.18), 0 8px 18px -12px rgba(15, 23, 42, 0.12);
   }
 
   .btn-premium {

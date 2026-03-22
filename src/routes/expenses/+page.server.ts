@@ -1,46 +1,58 @@
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
-    const projectId = url.searchParams.get('project');
-    const status = url.searchParams.get('status'); // 'all', 'unpaid', 'paid'
-    const type = url.searchParams.get('type'); // 'all', 'income', 'expense'
+    const projectId = url.searchParams.get('project') || 'all';
+    const status = url.searchParams.get('status') || 'all';
+    const type = url.searchParams.get('type') || 'all';
 
-    // Fetch projects for filter
     const { data: projects } = await supabase.from('projects').select('*').order('name');
 
-    // Build query
     let query = supabase
         .from('expenses')
         .select(`
-      *,
-      projects (name),
-      profiles!expenses_paid_by_fkey (display_name)
-    `)
+            *,
+            projects (name),
+            profiles!expenses_paid_by_fkey (display_name)
+        `)
         .order('paid_at', { ascending: false });
 
-    if (projectId && projectId !== 'all') {
+    if (projectId !== 'all') {
         query = query.eq('project_id', projectId);
     }
 
-    if (type && type !== 'all') {
-        query = query.eq('transaction_type', type);
-    }
+    const { data: projectScopedExpenses } = await query;
+    const expenses = (projectScopedExpenses || []).filter((expense) => {
+        const matchesType = type === 'all' || expense.transaction_type === type;
+        const matchesStatus =
+            status === 'all' ||
+            (status === 'unpaid' && !expense.is_reimbursed) ||
+            (status === 'paid' && expense.is_reimbursed);
 
-    if (status === 'unpaid') {
-        query = query.eq('is_reimbursed', false);
-    } else if (status === 'paid') {
-        query = query.eq('is_reimbursed', true);
-    }
+        return matchesType && matchesStatus;
+    });
 
-    const { data: expenses } = await query;
+    const summaryCounts = {
+        all: projectScopedExpenses?.length || 0,
+        unpaid: projectScopedExpenses?.filter((expense) => expense.transaction_type === 'expense' && !expense.is_reimbursed).length || 0,
+        paid: projectScopedExpenses?.filter((expense) => expense.transaction_type === 'expense' && expense.is_reimbursed).length || 0,
+        income: projectScopedExpenses?.filter((expense) => expense.transaction_type === 'income').length || 0,
+        expense: projectScopedExpenses?.filter((expense) => expense.transaction_type === 'expense').length || 0
+    };
+
+    const summaryTotals = {
+        filteredCount: expenses.length,
+        filteredAmount: expenses.reduce((sum, expense) => sum + Number(expense.amount), 0)
+    };
 
     return {
-        expenses: expenses || [],
+        expenses,
         projects: projects || [],
+        summaryCounts,
+        summaryTotals,
         filters: {
-            project: projectId || 'all',
-            status: status || 'all',
-            type: type || 'all'
+            project: projectId,
+            status,
+            type
         }
     };
 };

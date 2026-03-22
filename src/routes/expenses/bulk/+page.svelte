@@ -1,557 +1,407 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
     import {
-        Loader2,
-        ArrowUpRight,
-        ArrowDownLeft,
-        ScanLine,
-        Plus,
-        Trash2,
-        ArrowLeft,
-        Upload,
-        AlertCircle,
-        X,
-        Save,
-        ChevronLeft,
-        Sparkles,
         CheckCircle2,
+        ChevronDown,
+        ChevronLeft,
+        Loader2,
+        ScanLine,
+        Trash2,
+        Upload,
+        X,
     } from "lucide-svelte";
+    import { fade, fly, scale } from "svelte/transition";
     import { getOCRWorker } from "$lib/stores/ocrStore";
-    import { onMount } from "svelte";
     import { preprocessImage } from "$lib/utils/imageProcessor";
-    import { fade, slide, scale } from "svelte/transition";
+    import {
+        extractExpenseData,
+        expenseCategories,
+        getTodayLocalDate,
+    } from "$lib/utils/expenseForm";
 
     export let data;
     export let form;
 
+    type ReviewItem = {
+        fileIndex: number;
+        previewUrl: string;
+        status: "scanning" | "ready" | "error";
+        amount: number | null;
+        notes: string;
+        description: string;
+        date: string;
+        category: string;
+        projectId: string;
+        paidBy: string;
+        transactionType: "expense";
+        isReimbursed: boolean;
+        expanded: boolean;
+    };
+
     let loading = false;
     let selectedPreview: string | null = null;
-    let items: any[] = [];
+    let items: ReviewItem[] = [];
     let isProcessing = false;
-
-    // Store files separately to ensure they persist for FormData
     let fileStore: Map<number, File> = new Map();
 
-    const expenseCategories = [
-        "อาหาร",
-        "เดินทาง",
-        "ของใช้",
-        "ที่พัก",
-        "สุขภาพ",
-        "บันเทิง",
-        "ช้อปปิ้ง",
-        "ค่าน้ำ",
-        "ค่าไฟ",
-        "ค่าโทรศัพท์",
-        "ค่าอินเตอร์เน็ต",
-        "ค่าสมาชิก/Sub",
-        "ค่าเช่าบ้าน",
-        "ค่าชาร์จรถ",
-        "ค่าน้ำมัน",
-        "ประกัน",
-        "การศึกษา",
-        "สัตว์เลี้ยง",
-        "บริจาค/ทำบุญ",
-    ];
-
-    // Helper to extract data from OCR text (simplified from new/+page.svelte)
-    function extractData(text: string) {
-        const lines = text.split("\n");
-        let amount = null;
-        let date = "";
-        let notes = "";
-
-        const thaiMonthMap: Record<string, number> = {
-            มค: 1,
-            กพ: 2,
-            มีค: 3,
-            เมย: 4,
-            พค: 5,
-            มิย: 6,
-            กค: 7,
-            สค: 8,
-            กย: 9,
-            ตค: 10,
-            พย: 11,
-            ธค: 12,
-            มกราคม: 1,
-            กุมภาพันธ์: 2,
-            มีนาคม: 3,
-            เมษายน: 4,
-            พฤษภาคม: 5,
-            มิถุนายน: 6,
-            กรกฎาคม: 7,
-            สิงหาคม: 8,
-            กันยายน: 9,
-            ตุลาคม: 10,
-            พฤศจิกายน: 11,
-            ธันวาคม: 12,
-            jan: 1,
-            feb: 2,
-            mar: 3,
-            apr: 4,
-            may: 5,
-            jun: 6,
-            jul: 7,
-            aug: 8,
-            sep: 9,
-            oct: 10,
-            nov: 11,
-            dec: 12,
-        };
-
-        // Extraction logic matches new/+page.svelte
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            const sameLineMatch = line.match(
-                /(?:จำนวน|จํานวน)\s*[:.]?\s*([\d,]+\.?\d*)/i,
-            );
-            if (sameLineMatch && sameLineMatch[1]) {
-                const val = parseFloat(sameLineMatch[1].replace(/,/g, ""));
-                if (!isNaN(val) && val > 0) {
-                    amount = val;
-                    break;
-                }
-            }
-        }
-
-        for (let line of lines) {
-            const dateMatch = line.match(
-                /(\d{1,2})\s*([ก-๙a-zA-Z\.]+)\s*(\d{2,4})/,
-            );
-            if (dateMatch) {
-                const day = parseInt(dateMatch[1]);
-                const monthStr = dateMatch[2]
-                    .toLowerCase()
-                    .replace(/[\.\s]/g, "");
-                const yearRaw = parseInt(dateMatch[3]);
-                let month = thaiMonthMap[monthStr];
-                if (!month) {
-                    for (const [key, val] of Object.entries(thaiMonthMap)) {
-                        if (monthStr.includes(key) || key.includes(monthStr)) {
-                            month = val;
-                            break;
-                        }
-                    }
-                }
-                if (month && day >= 1 && day <= 31) {
-                    let year = yearRaw;
-                    if (yearRaw > 2500) year = yearRaw - 543;
-                    else if (yearRaw < 100)
-                        year =
-                            yearRaw > 40
-                                ? 2500 + yearRaw - 543
-                                : 2000 + yearRaw;
-                    if (year >= 2000 && year <= 2100) {
-                        const pad = (n: number) => String(n).padStart(2, "0");
-                        date = `${year}-${pad(month)}-${pad(day)}`;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (!date) date = new Date().toISOString().split("T")[0];
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            const noteLabelMatch = line.match(
-                /(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)/i,
-            );
-            if (noteLabelMatch) {
-                let content = line
-                    .substring(noteLabelMatch.index! + noteLabelMatch[0].length)
-                    .replace(/^[:.\s]+/, "")
-                    .trim();
-                if (!content && i + 1 < lines.length)
-                    content = lines[i + 1].trim();
-                if (content) {
-                    notes = content;
-                    break;
-                }
-            }
-        }
-
-        return { amount, notes, date };
-    }
+    const defaultProject = data.projects.find((project) => project.name === "กองกลาง") || data.projects[0];
+    const defaultProjectId = defaultProject?.id || "";
 
     async function processFiles(files: FileList) {
         isProcessing = true;
         const worker = await getOCRWorker();
 
-        const defaultProject =
-            data.projects.find((p) => p.name === "กองกลาง") || data.projects[0];
-        const defaultProjectId = defaultProject?.id || "";
-
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const previewUrl = await new Promise<string>((res) => {
-                const r = new FileReader();
-                r.onload = (e) => res(e.target?.result as string);
-                r.readAsDataURL(file);
+            const previewUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => resolve(event.target?.result as string);
+                reader.readAsDataURL(file);
             });
 
-            const fileIndex = items.length;
+            const fileIndex = Date.now() + i;
             fileStore.set(fileIndex, file);
 
-            const newItem = {
+            const initialItem: ReviewItem = {
                 fileIndex,
                 previewUrl,
                 status: "scanning",
                 amount: null,
                 notes: "",
                 description: "",
-                date: new Date().toISOString().split("T")[0],
+                date: getTodayLocalDate(),
                 category: "",
                 projectId: defaultProjectId,
-                paidBy: data.currentProfileId || data.profiles[0]?.id || "",
+                paidBy: data.currentProfileId || "",
                 transactionType: "expense",
                 isReimbursed: false,
+                expanded: i === 0 && items.length === 0,
             };
 
-            items = [...items, newItem];
-            const currentIndex = items.length - 1;
+            items = [...items, initialItem];
 
             try {
                 const processedImageUrl = await preprocessImage(file);
                 const {
                     data: { text },
                 } = await worker.recognize(processedImageUrl);
-                const extracted = extractData(text);
+                const extracted = extractExpenseData(text);
 
-                items[currentIndex] = {
-                    ...items[currentIndex],
-                    ...extracted,
-                    status: "ready",
-                    description:
-                        extracted.notes || items[currentIndex].description,
-                };
-            } catch (err) {
-                console.error("OCR Error:", err);
-                items[currentIndex].status = "error";
+                items = items.map((item) =>
+                    item.fileIndex === fileIndex
+                        ? {
+                              ...item,
+                              status: "ready",
+                              amount: extracted.amount,
+                              date: extracted.date,
+                              notes: extracted.notes,
+                              description: extracted.description || item.description,
+                          }
+                        : item
+                );
+            } catch (error) {
+                console.error("OCR Error:", error);
+                items = items.map((item) =>
+                    item.fileIndex === fileIndex ? { ...item, status: "error", expanded: true } : item
+                );
             }
         }
+
         isProcessing = false;
     }
 
     function handleFileChange(event: Event) {
         const input = event.target as HTMLInputElement;
-        if (input.files) processFiles(input.files);
+        if (input.files?.length) {
+            processFiles(input.files);
+        }
     }
 
-    function removeItem(index: number) {
-        const item = items[index];
-        if (item && typeof item.fileIndex === "number")
-            fileStore.delete(item.fileIndex);
-        items = items.filter((_, i) => i !== index);
+    function removeItem(fileIndex: number) {
+        fileStore.delete(fileIndex);
+        items = items.filter((item) => item.fileIndex !== fileIndex);
     }
+
+    function toggleExpanded(fileIndex: number) {
+        items = items.map((item) =>
+            item.fileIndex === fileIndex ? { ...item, expanded: !item.expanded } : item
+        );
+    }
+
+    $: reviewableItems = items;
 </script>
 
-<div class="max-w-3xl mx-auto pb-32">
-    <div class="flex items-center justify-between mb-8 px-1">
-        <div class="flex items-center gap-2">
-            <a
-                href="/expenses"
-                class="p-2 -ml-2 text-slate-400 hover:text-slate-900 transition-colors"
-            >
-                <ChevronLeft size={24} />
-            </a>
-            <h1 class="text-2xl font-black text-slate-900 font-display">
-                บันทึกหลายรายการ
-            </h1>
-        </div>
-
-        <div class="flex items-center gap-3">
-            <label
-                class="cursor-pointer bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-2xl font-bold hover:bg-slate-50 transition shadow-sm text-xs flex items-center gap-2 active:scale-95"
-            >
-                <Plus size={16} />
-                <span class="uppercase tracking-tight">เพิ่มสลิป</span>
-                <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    class="hidden"
-                    on:change={handleFileChange}
-                />
-            </label>
+<div class="page-shell pb-44">
+    <div class="flex items-center gap-3 px-1">
+        <a
+            href="/expenses"
+            class="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500"
+        >
+            <ChevronLeft size={20} />
+        </a>
+        <div>
+            <p class="eyebrow">Batch entry</p>
+            <h1 class="text-2xl font-black text-slate-900 font-display">สแกนหลายสลิป</h1>
         </div>
     </div>
 
     {#if form?.error}
-        <div
-            class="bg-rose-50 text-rose-600 p-4 rounded-2xl mb-6 text-sm font-medium border border-rose-100 flex items-start gap-2"
-        >
-            <AlertCircle size={18} class="shrink-0 mt-0.5" />
-            <span>{form.error}</span>
+        <div class="surface-card border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-700">
+            {form.error}
         </div>
     {/if}
 
-    {#if items.length === 0}
-        <div
-            class="bg-white border-2 border-dashed border-slate-200 rounded-[32px] p-16 text-center premium-shadow"
-        >
-            <div
-                class="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-indigo-600"
-            >
-                <Upload size={40} />
-            </div>
-            <h3 class="text-xl font-black text-slate-900 mb-2 font-display">
-                ยังไม่มีสลิป
-            </h3>
-            <p
-                class="text-slate-500 mb-8 max-w-[240px] mx-auto text-sm font-medium"
-            >
-                อัพโหลดรูปสลิปธนาคารหลายรูปเพื่อบันทึกรายการอัตโนมัติด้วย AI
-            </p>
-            <label
-                class="cursor-pointer bg-indigo-600 text-white px-8 py-3.5 rounded-2xl font-black tracking-tight hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 active:scale-95 inline-block font-display"
-            >
-                เลือกรูปหลายสลิป
-                <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    class="hidden"
-                    on:change={handleFileChange}
-                />
-            </label>
+    <section class="surface-card p-5">
+        <div class="mb-4">
+            <h2 class="text-lg font-black text-slate-900 font-display">อัปโหลดแล้ว review ทีละรายการ</h2>
+            <p class="text-sm text-slate-500">ระบบจะช่วยอ่านสลิปก่อน แล้วคุณค่อยขยาย card ที่ต้องแก้จริง ลดเวลาไล่กรอกทั้งหมด</p>
         </div>
+
+        <label
+            class="flex cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center transition hover:border-indigo-300 hover:bg-indigo-50"
+        >
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                {#if isProcessing}
+                    <ScanLine size={22} class="animate-spin" />
+                {:else}
+                    <Upload size={22} />
+                {/if}
+            </div>
+            <div>
+                <div class="text-base font-bold text-slate-900">เลือกรูปหลายสลิป</div>
+                <p class="mt-1 text-sm text-slate-500">อัปโหลดได้หลายใบ แล้วค่อย approve หรือเอาออกทีละรายการ</p>
+            </div>
+            <input type="file" multiple accept="image/*" class="hidden" on:change={handleFileChange} />
+        </label>
+    </section>
+
+    {#if reviewableItems.length === 0}
+        <section class="surface-card p-8 text-center">
+            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
+                <Upload size={26} />
+            </div>
+            <h2 class="text-lg font-black text-slate-900 font-display">ยังไม่มีคิวรอตรวจ</h2>
+            <p class="mt-2 text-sm text-slate-500">เมื่ออัปโหลดสลิปแล้ว แต่ละใบจะมาอยู่ในคิว review ด้านล่างนี้</p>
+        </section>
     {:else}
         <form
-            id="bulk-save-form"
             method="POST"
             action="?/batchSave"
             enctype="multipart/form-data"
             use:enhance={({ formData }) => {
                 loading = true;
-                items.forEach((item, i) => {
+                reviewableItems.forEach((item, index) => {
                     const file = fileStore.get(item.fileIndex);
-                    if (file && file instanceof File && file.size > 0)
-                        formData.append(`item_${i}_file`, file);
+                    if (file) {
+                        formData.append(`item_${index}_file`, file);
+                    }
                 });
+
                 return async ({ result, update }) => {
                     loading = false;
-                    if (result.type === "redirect")
+                    if (result.type === "redirect") {
                         window.location.href = result.location;
-                    else await update();
+                    } else {
+                        await update();
+                    }
                 };
             }}
-            class="space-y-6"
+            class="space-y-4"
         >
-            <input type="hidden" name="item_count" value={items.length} />
+            <input type="hidden" name="item_count" value={reviewableItems.length} />
 
-            <div class="grid gap-6">
-                {#each items as item, i}
-                    <div
-                        class="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col md:flex-row gap-8 relative group hover:border-indigo-100 transition-colors"
-                        in:scale
-                    >
+            {#each reviewableItems as item, index}
+                <section class="surface-card overflow-hidden" in:scale>
+                    <div class="flex gap-4 p-4">
                         <button
                             type="button"
-                            on:click={() => removeItem(i)}
-                            class="absolute -top-3 -right-3 bg-rose-100 text-rose-600 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md hover:bg-rose-200"
+                            class="relative h-28 w-24 shrink-0 overflow-hidden rounded-[22px] border border-slate-200 bg-slate-100"
+                            on:click={() => (selectedPreview = item.previewUrl)}
                         >
-                            <X size={16} />
+                            <img src={item.previewUrl} alt="Slip preview" class="h-full w-full object-cover" />
+                            {#if item.status === "scanning"}
+                                <div class="absolute inset-0 flex items-center justify-center bg-indigo-600/40 text-white backdrop-blur-sm">
+                                    <Loader2 size={22} class="animate-spin" />
+                                </div>
+                            {/if}
                         </button>
 
-                        <div class="w-full md:w-36 shrink-0">
-                            <button
-                                type="button"
-                                class="relative aspect-[3/4] rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 w-full block cursor-zoom-in group/img shadow-inner"
-                                on:click={() =>
-                                    (selectedPreview = item.previewUrl)}
-                            >
-                                <img
-                                    src={item.previewUrl}
-                                    alt="Slip"
-                                    class="w-full h-full object-cover transition duration-500 group-hover/img:scale-110"
-                                />
-                                {#if item.status === "scanning"}
-                                    <div
-                                        class="absolute inset-0 bg-indigo-600/40 backdrop-blur-md flex flex-col items-center justify-center text-white p-2 text-center"
-                                        in:fade
-                                    >
-                                        <Loader2
-                                            class="animate-spin mb-2"
-                                            size={32}
-                                        />
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h2 class="text-base font-black text-slate-900 font-display">รายการ {index + 1}</h2>
                                         <span
-                                            class="text-[10px] font-black uppercase tracking-widest"
-                                            >AI Scanning</span
+                                            class={`status-chip ${
+                                                item.status === "ready"
+                                                    ? "bg-emerald-50 text-emerald-700"
+                                                    : item.status === "error"
+                                                      ? "bg-rose-50 text-rose-700"
+                                                      : "bg-indigo-50 text-indigo-700"
+                                            }`}
                                         >
+                                            {item.status === "ready"
+                                                ? "พร้อมตรวจ"
+                                                : item.status === "error"
+                                                  ? "อ่านไม่สมบูรณ์"
+                                                  : "กำลังอ่าน"}
+                                        </span>
                                     </div>
-                                {/if}
-                            </button>
-                        </div>
+                                    <div class="mt-2 text-2xl font-black text-slate-900 font-display">
+                                        {item.amount ? item.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                                    </div>
+                                    <p class="mt-1 truncate text-sm text-slate-500">
+                                        {item.description || "ยังไม่มีรายละเอียดจาก OCR"}
+                                    </p>
+                                </div>
 
-                        <div
-                            class="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
-                        >
-                            <input
-                                type="hidden"
-                                name={`item_${i}_transaction_type`}
-                                value={item.transactionType}
-                            />
-
-                            <div class="lg:col-span-1">
-                                <label
-                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
-                                    >จำนวนเงิน</label
-                                >
-                                <div class="relative">
-                                    <input
-                                        type="number"
-                                        name={`item_${i}_amount`}
-                                        step="0.01"
-                                        bind:value={item.amount}
-                                        class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-lg font-black font-display tracking-tight {item.status ===
-                                        'scanning'
-                                            ? 'animate-pulse'
-                                            : ''}"
-                                        placeholder="0.00"
-                                    />
-                                    <span
-                                        class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold"
-                                        >฿</span
+                                <div class="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        class="rounded-2xl border border-slate-200 bg-white p-3 text-slate-500"
+                                        aria-label="Toggle item details"
+                                        on:click={() => toggleExpanded(item.fileIndex)}
                                     >
+                                        <ChevronDown
+                                            size={16}
+                                            class={`transition-transform ${item.expanded ? "rotate-180" : ""}`}
+                                        />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-rose-600"
+                                        aria-label="Remove item"
+                                        on:click={() => removeItem(item.fileIndex)}
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
                                 </div>
                             </div>
 
-                            <div>
-                                <label
-                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
-                                    >วันที่</label
-                                >
-                                <input
-                                    type="date"
-                                    name={`item_${i}_date`}
-                                    bind:value={item.date}
-                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
-                                />
-                            </div>
-
-                            <div>
-                                <label
-                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
-                                    >หมวดหมู่</label
-                                >
-                                <select
-                                    name={`item_${i}_category`}
-                                    bind:value={item.category}
-                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
-                                >
-                                    <option value="">-- เลือก --</option>
-                                    {#each expenseCategories as cat}
-                                        <option value={cat}>{cat}</option>
-                                    {/each}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label
-                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
-                                    >โปรเจค</label
-                                >
-                                <select
-                                    name={`item_${i}_project_id`}
-                                    bind:value={item.projectId}
-                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
-                                >
-                                    {#each data.projects as project}
-                                        <option value={project.id}
-                                            >{project.name}</option
-                                        >
-                                    {/each}
-                                </select>
-                            </div>
-
-                            <div>
-                                <div
-                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
-                                    >ผู้จ่าย</div
-                                >
-                                <input type="hidden" name={`item_${i}_paid_by`} value={item.paidBy || ''} />
-                                <div class="w-full bg-slate-50 rounded-2xl py-3 px-4 flex items-center gap-3">
-                                    {#if data.currentUser?.avatar_url}
-                                        <img src={data.currentUser.avatar_url} alt="" class="w-7 h-7 rounded-full object-cover" referrerpolicy="no-referrer" />
-                                    {/if}
-                                    <span class="text-sm font-bold text-slate-700">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</span>
-                                </div>
-                            </div>
-
-                            <div class="md:col-span-full">
-                                <label
-                                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
-                                    >รายละเอียด</label
-                                >
-                                <input
-                                    type="text"
-                                    name={`item_${i}_description`}
-                                    bind:value={item.description}
-                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
-                                    placeholder="ใส่รายละเอียด..."
-                                />
-                                <input
-                                    type="hidden"
-                                    name={`item_${i}_notes`}
-                                    value={item.notes}
-                                />
-                            </div>
-
-                            <div class="md:col-span-full">
-                                <input
-                                    type="hidden"
-                                    name={`item_${i}_is_reimbursed`}
-                                    value={item.isReimbursed ? 'true' : 'false'}
-                                />
-                                <button
-                                    type="button"
-                                    on:click={() => {
-                                        items[i].isReimbursed = !items[i].isReimbursed;
-                                    }}
-                                    class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all w-full {item.isReimbursed
-                                        ? 'bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200'
-                                        : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}"
-                                >
-                                    <CheckCircle2
-                                        size={20}
-                                        class={item.isReimbursed
-                                            ? 'text-emerald-500'
-                                            : 'text-slate-300'}
-                                    />
-                                    <span class="text-sm font-bold">
-                                        {item.isReimbursed ? 'เคลียร์แล้ว' : 'ยังไม่เคลียร์'}
-                                    </span>
-                                </button>
+                            <div class="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
+                                <span class="rounded-full bg-slate-100 px-3 py-1">{item.date}</span>
+                                <span class="rounded-full bg-slate-100 px-3 py-1">{item.category || "ยังไม่เลือกหมวด"}</span>
+                                <span class="rounded-full bg-slate-100 px-3 py-1">{data.currentUser?.name || "ผู้ใช้ปัจจุบัน"}</span>
                             </div>
                         </div>
                     </div>
-                {/each}
-            </div>
 
-            <div
-                class="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 p-6 z-30 shadow-[0_-20px_40px_rgba(0,0,0,0.05)]"
-            >
-                <div class="max-w-3xl mx-auto flex gap-4">
+                    {#if item.expanded}
+                        <div class="border-t border-slate-200 bg-slate-50/70 p-4">
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <input type="hidden" name={`item_${index}_transaction_type`} value={item.transactionType} />
+                                <input type="hidden" name={`item_${index}_paid_by`} value={item.paidBy || ""} />
+                                <input type="hidden" name={`item_${index}_notes`} value={item.notes} />
+                                <input type="hidden" name={`item_${index}_is_reimbursed`} value={item.isReimbursed ? "true" : "false"} />
+
+                                <div>
+                                    <div class="field-label">จำนวนเงิน</div>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        name={`item_${index}_amount`}
+                                        bind:value={item.amount}
+                                        class="field-input"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div class="field-label">วันที่</div>
+                                    <input
+                                        type="date"
+                                        name={`item_${index}_date`}
+                                        bind:value={item.date}
+                                        class="field-input"
+                                    />
+                                </div>
+
+                                <div class="md:col-span-2">
+                                    <div class="field-label">รายละเอียด</div>
+                                    <input
+                                        type="text"
+                                        name={`item_${index}_description`}
+                                        bind:value={item.description}
+                                        class="field-input"
+                                        placeholder="อธิบายรายการนี้"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div class="field-label">หมวดหมู่</div>
+                                    <select
+                                        name={`item_${index}_category`}
+                                        bind:value={item.category}
+                                        class="field-input"
+                                    >
+                                        <option value="">เลือกหมวดหมู่</option>
+                                        {#each expenseCategories as category}
+                                            <option value={category}>{category}</option>
+                                        {/each}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <div class="field-label">โปรเจค</div>
+                                    <select
+                                        name={`item_${index}_project_id`}
+                                        bind:value={item.projectId}
+                                        class="field-input"
+                                    >
+                                        {#each data.projects as project}
+                                            <option value={project.id}>{project.name}</option>
+                                        {/each}
+                                    </select>
+                                </div>
+
+                                <div class="md:col-span-2">
+                                    <button
+                                        type="button"
+                                        class={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold ${
+                                            item.isReimbursed
+                                                ? "bg-emerald-50 text-emerald-700"
+                                                : "bg-white text-slate-600"
+                                        }`}
+                                        on:click={() => {
+                                            items = items.map((entry) =>
+                                                entry.fileIndex === item.fileIndex
+                                                    ? { ...entry, isReimbursed: !entry.isReimbursed }
+                                                    : entry
+                                            );
+                                        }}
+                                    >
+                                        <CheckCircle2 size={18} />
+                                        {item.isReimbursed ? "รายการนี้เคลียร์แล้ว" : "รายการนี้ยังไม่เคลียร์"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
+                </section>
+            {/each}
+
+            <div class="sticky-action-bar">
+                <div class="mx-auto flex max-w-md gap-3">
                     <button
                         type="button"
-                        on:click={() => (items = [])}
-                        class="px-8 py-4 bg-slate-100 rounded-[22px] text-slate-600 font-black tracking-tight hover:bg-slate-200 transition active:scale-95 font-display min-w-[140px]"
+                        class="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600"
+                        on:click={() => {
+                            items = [];
+                            fileStore = new Map();
+                        }}
                     >
                         ล้างทั้งหมด
                     </button>
                     <button
                         type="submit"
-                        disabled={loading || isProcessing}
-                        class="flex-1 bg-indigo-600 text-white py-4 rounded-[22px] font-black tracking-tight hover:bg-indigo-700 transition shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 font-display"
+                        disabled={loading || isProcessing || !reviewableItems.length}
+                        class="flex flex-[1.3] items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
                     >
                         {#if loading}
-                            <Loader2 class="animate-spin" size={24} />
-                            <span>กำลังบันทึก...</span>
+                            <Loader2 size={18} class="animate-spin" />
+                            กำลังบันทึก...
                         {:else}
-                            <Sparkles size={24} />
-                            <span>บันทึก {items.length} รายการ</span>
+                            บันทึก {reviewableItems.length} รายการ
                         {/if}
                     </button>
                 </div>
@@ -561,23 +411,20 @@
 </div>
 
 {#if selectedPreview}
-    <div
-        class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-xl"
+    <button
+        type="button"
+        class="fixed inset-0 z-[80] bg-slate-950/80 p-4 backdrop-blur-sm"
+        aria-label="Close preview"
         on:click={() => (selectedPreview = null)}
         in:fade
         out:fade
     >
-        <button
-            class="absolute top-6 right-6 text-white/40 hover:text-white transition p-3 bg-white/10 rounded-2xl"
-            on:click={() => (selectedPreview = null)}
-        >
-            <X size={32} />
-        </button>
         <img
             src={selectedPreview}
-            alt="Full Preview"
-            class="max-w-full max-h-[90vh] object-contain rounded-3xl shadow-2xl"
+            alt="Slip preview"
+            class="mx-auto max-h-[90vh] max-w-full rounded-[28px] object-contain shadow-2xl"
             in:scale
         />
-    </div>
+        <span class="sr-only">Close preview</span>
+    </button>
 {/if}

@@ -1,155 +1,127 @@
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals: { supabase } }) => {
-    // Fetch recent expenses
+type SettlementState = 'you_owe' | 'owed_to_you' | 'clear' | 'unknown';
+
+export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
+    const { currentProfileId, currentUser } = await parent();
+
     const { data: expenses } = await supabase
         .from('expenses')
         .select(`
-      *,
-      projects (name),
-      profiles!expenses_paid_by_fkey (display_name)
-    `)
+            *,
+            projects (name),
+            profiles!expenses_paid_by_fkey (display_name)
+        `)
         .order('paid_at', { ascending: false })
-        .limit(10);
+        .limit(8);
 
-    // Calculate debts
-    const { data: debts } = await supabase
-        .from('expenses')
-        .select(`
-      amount,
-      paid_by,
-      profiles!expenses_paid_by_fkey (display_name)
-    `)
-        .eq('is_reimbursed', false);
-
-    // Group by Payer
-    const debtSummary: Record<string, { name: string, amount: number }> = {};
-
-    if (debts) {
-        debts.forEach((debt) => {
-            const payerId = debt.paid_by;
-            // Handle potential array return from Supabase join
-            const profileData = debt.profiles as any;
-            const payerName = Array.isArray(profileData)
-                ? profileData[0]?.display_name
-                : profileData?.display_name || 'Unknown';
-
-            if (!debtSummary[payerId]) {
-                debtSummary[payerId] = { name: payerName, amount: 0 };
-            }
-            debtSummary[payerId].amount += debt.amount;
-        });
-    }
-
-    // Calculate Project Totals
     const { data: allExpenses } = await supabase
         .from('expenses')
         .select(`
             amount,
             transaction_type,
+            paid_by,
+            is_reimbursed,
             projects (id, name)
         `);
 
-    const projectSummary: Record<string, { name: string, income: number, expense: number }> = {};
-
-    if (allExpenses) {
-        allExpenses.forEach((item) => {
-            const project = item.projects as any;
-            const projectId = project?.id;
-            const projectName = project?.name || 'Unknown';
-
-            if (!projectId) return;
-
-            if (!projectSummary[projectId]) {
-                projectSummary[projectId] = { name: projectName, income: 0, expense: 0 };
-            }
-
-            if (item.transaction_type === 'income') {
-                projectSummary[projectId].income += item.amount;
-            } else {
-                projectSummary[projectId].expense += item.amount;
-            }
-        });
-    }
-
-    // Calculate Net Balance (Who owes whom)
-    // Calculate Net Balance (Who owes whom)
-    // Assumption: All expenses are split 50/50 between 2 people (พี่, น้อง)
-    // We need to find the 2 profiles first
     const { data: profiles } = await supabase
         .from('profiles')
         .select('id, display_name')
         .order('created_at', { ascending: true })
         .limit(2);
 
-    let netBalance = {
-        debtor: null as string | null, // Who owes
-        creditor: null as string | null, // Who is owed
-        amount: 0
-    };
+    const projectSummary: Record<string, { name: string; income: number; expense: number }> = {};
+    const payerMap: Record<string, number> = {};
 
-    if (profiles && profiles.length >= 2) {
-        // Calculate total paid by each person (only for UNREIMBURSED expenses)
-        // Actually, we should look at ALL expenses that are NOT reimbursed yet.
-        // If it is reimbursed, it's settled.
-
-        const { data: unpaidExpenses } = await supabase
-            .from('expenses')
-            .select('amount, paid_by, transaction_type')
-            .eq('is_reimbursed', false);
-
-        if (unpaidExpenses) {
-            const paidMap: Record<string, number> = {};
-            profiles.forEach(p => paidMap[p.id] = 0);
-
-            unpaidExpenses.forEach(item => {
-                // Only count expenses for net balance calculation
-                // Income is money coming IN to the project, not "paid out" by anyone
-                // Net balance should only consider: who paid MORE expenses out of pocket
-                if (item.transaction_type === 'expense') {
-                    paidMap[item.paid_by] += item.amount;
-                }
-                // Note: Income transactions are intentionally NOT counted here
-                // because they represent money received, not money spent
-            });
-
-            // Calculate Net Balance (Full difference, no division as per user request)
-            // User requested: "ไม่ต้องหาร คิดจำนวนเต็ม" (Don't divide, use full number)
-            // This means we just compare who paid more and by how much.
-            // Note: This implies the "debt" is the full difference, which mathematically
-            // might mean they are settling to a state where one person paid everything?
-            // Or simply they want to see the "gap" between them.
-
-            const p1 = profiles[0];
-            const p2 = profiles[1];
-
-            const p1_paid = paidMap[p1.id];
-            const p2_paid = paidMap[p2.id];
-
-            const diff = p1_paid - p2_paid;
-
-            if (diff > 0) {
-                // P1 paid more
-                netBalance = {
-                    debtor: p2.display_name,
-                    creditor: p1.display_name,
-                    amount: diff
-                };
-            } else if (diff < 0) {
-                // P2 paid more
-                netBalance = {
-                    debtor: p1.display_name,
-                    creditor: p2.display_name,
-                    amount: Math.abs(diff)
+    allExpenses?.forEach((item) => {
+        const project = item.projects as { id?: string; name?: string } | null;
+        if (project?.id) {
+            if (!projectSummary[project.id]) {
+                projectSummary[project.id] = {
+                    name: project.name || 'ไม่ระบุโปรเจค',
+                    income: 0,
+                    expense: 0
                 };
             }
+
+            if (item.transaction_type === 'income') {
+                projectSummary[project.id].income += Number(item.amount);
+            } else {
+                projectSummary[project.id].expense += Number(item.amount);
+            }
+        }
+
+        if (item.transaction_type === 'expense' && !item.is_reimbursed) {
+            payerMap[item.paid_by] = (payerMap[item.paid_by] || 0) + Number(item.amount);
+        }
+    });
+
+    let settlementState: SettlementState = 'unknown';
+    let settlementAmount = 0;
+    let otherPartyName: string | null = null;
+
+    if (profiles && profiles.length >= 2 && currentProfileId && profiles.some((profile) => profile.id === currentProfileId)) {
+        const currentProfile = profiles.find((profile) => profile.id === currentProfileId)!;
+        const otherProfile = profiles.find((profile) => profile.id !== currentProfileId)!;
+        const currentPaid = payerMap[currentProfile.id] || 0;
+        const otherPaid = payerMap[otherProfile.id] || 0;
+        const diff = currentPaid - otherPaid;
+
+        otherPartyName = otherProfile.display_name;
+
+        if (diff > 0) {
+            settlementState = 'owed_to_you';
+            settlementAmount = diff;
+        } else if (diff < 0) {
+            settlementState = 'you_owe';
+            settlementAmount = Math.abs(diff);
+        } else {
+            settlementState = 'clear';
         }
     }
 
+    const unpaidExpenses = (allExpenses || []).filter(
+        (item) => item.transaction_type === 'expense' && !item.is_reimbursed
+    );
+
+    const settlementSummary = {
+        state: settlementState,
+        amount: settlementAmount,
+        otherPartyName,
+        unpaidCount: unpaidExpenses.length,
+        headline:
+            settlementState === 'you_owe'
+                ? `คุณต้องโอน ${otherPartyName || 'อีกฝ่าย'}`
+                : settlementState === 'owed_to_you'
+                  ? `${otherPartyName || 'อีกฝ่าย'} ต้องโอนให้คุณ`
+                  : settlementState === 'clear'
+                    ? 'ตอนนี้ไม่มีรายการค้าง'
+                    : 'พร้อมเริ่มบันทึกรายการ',
+        subline:
+            settlementState === 'you_owe'
+                ? 'เปิดรายการค้างแล้วเคลียร์ยอดจากหน้ารายละเอียดได้ทันที'
+                : settlementState === 'owed_to_you'
+                  ? 'ดูรายการที่ยังไม่เคลียร์เพื่อเช็กยอดและหลักฐาน'
+                  : settlementState === 'clear'
+                    ? 'ถ้ามีรายการใหม่ เพิ่มได้ทันทีจากปุ่มบันทึกด้านล่าง'
+                    : 'เชื่อมบัญชีผู้ใช้กับโปรไฟล์ก่อนเพื่อดูยอดแบบเฉพาะตัว',
+        ctaLabel:
+            settlementState === 'you_owe'
+                ? 'เคลียร์ยอดตอนนี้'
+                : settlementState === 'owed_to_you'
+                  ? 'ดูรายการค้าง'
+                  : 'บันทึกรายการใหม่',
+        ctaHref:
+            settlementState === 'clear' || settlementState === 'unknown'
+                ? '/expenses/new'
+                : '/expenses?status=unpaid'
+    };
+
     return {
+        currentUser,
         expenses: expenses || [],
-        debtSummary,
         projectSummary,
-        netBalance
+        settlementSummary
     };
 };

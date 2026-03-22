@@ -16,7 +16,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
     }
 
     const { data: projects } = await supabase.from('projects').select('*').eq('is_active', true).order('name');
-    const { data: profiles } = await supabase.from('profiles').select('*').order('display_name');
 
     // Load attachments
     const { data: attachments } = await supabase
@@ -27,7 +26,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
     return {
         expense: { ...expense, attachments: attachments || [] },
         projects: projects || [],
-        profiles: profiles || [],
         currentProfileId,
         currentUser
     };

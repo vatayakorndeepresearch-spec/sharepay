@@ -1,220 +1,83 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
     import {
-        Loader2,
-        ArrowUpRight,
         ArrowDownLeft,
-        ArrowLeft,
-        Trash2,
+        ArrowUpRight,
+        ChevronLeft,
+        Image as ImageIcon,
+        Loader2,
         ScanLine,
+        Trash2,
     } from "lucide-svelte";
-    import { createWorker } from "tesseract.js";
+    import { getOCRWorker } from "$lib/stores/ocrStore";
+    import { preprocessImage } from "$lib/utils/imageProcessor";
+    import {
+        extractExpenseData,
+        expenseCategories,
+        incomeCategories,
+    } from "$lib/utils/expenseForm";
 
     export let data;
     export let form;
 
     let loading = false;
     let scanning = false;
-    let transactionType = data.expense.transaction_type || "expense";
     let previewUrls: string[] = [];
+    let highlightedFields: string[] = [];
+    let resetHighlightTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // Local bindings for form fields to allow programmatic updates
+    let transactionType: "expense" | "income" = data.expense.transaction_type || "expense";
     let amount = data.expense.amount;
     let notes = data.expense.notes || "";
     let paidAt = data.expense.paid_at;
+    let description = data.expense.description;
+    let category = data.expense.category || "";
+    let customCategory = "";
+    let isCustomCategory = false;
+
+    $: availableCategories = transactionType === "income" ? incomeCategories : expenseCategories;
+    $: submittedCategory = isCustomCategory ? customCategory : category;
+    $: {
+        if (category && !availableCategories.includes(category as never) && category !== "custom") {
+            isCustomCategory = true;
+            customCategory = category;
+            category = "custom";
+        }
+    }
+
+    function flashHighlights(fields: string[]) {
+        highlightedFields = fields;
+        if (resetHighlightTimer) clearTimeout(resetHighlightTimer);
+        resetHighlightTimer = setTimeout(() => {
+            highlightedFields = [];
+        }, 2200);
+    }
+
+    function isHighlighted(field: string) {
+        return highlightedFields.includes(field);
+    }
 
     async function processOCR(file: File) {
         scanning = true;
+
         try {
-            const worker = await createWorker("tha+eng");
+            const worker = await getOCRWorker();
+            const processedImageUrl = await preprocessImage(file);
             const {
                 data: { text },
-            } = await worker.recognize(file);
-            console.log("OCR Raw Text:", text);
+            } = await worker.recognize(processedImageUrl);
+            const extracted = extractExpenseData(text);
 
-            const lines = text.split("\n");
-
-            // --- 1. Extract Amount ---
-            let extractedAmount = null;
-            const amountLineRegex =
-                /(?:จำนวน|amount)\s*[:.]?\s*([\d,]+\.\d{2})/i;
-
-            for (let line of lines) {
-                const match = line.match(amountLineRegex);
-                if (match) {
-                    extractedAmount = parseFloat(match[1].replace(/,/g, ""));
-                    break;
-                }
+            if (extracted.amount) amount = extracted.amount;
+            if (extracted.date) paidAt = extracted.date;
+            if (extracted.notes) {
+                notes = extracted.notes;
+                description = extracted.description;
             }
 
-            if (!extractedAmount) {
-                const strictCurrency = text.match(
-                    /([\d,]+\.\d{2})\s*(?:THB|บาท)/i,
-                );
-                if (strictCurrency) {
-                    extractedAmount = parseFloat(
-                        strictCurrency[1].replace(/,/g, ""),
-                    );
-                }
-            }
-
-            if (extractedAmount && !isNaN(extractedAmount)) {
-                amount = extractedAmount;
-            }
-
-            // --- 2. Extract Date/Time (Priority: Thai/K-Plus format) ---
-            // Pattern: 31 ธ.ค. 68 or 31ธ.ค.68 or 31 Dec 2025
-            const thaiDateRegex =
-                /(\d{1,2})\s*([ก-๙\.\s]{2,}|[a-zA-Z]{3,}\.?)\s*(\d{2,4})/;
-
-            let foundDate = false;
-            for (let line of lines) {
-                const match = line.match(thaiDateRegex);
-                if (match) {
-                    const d = parseInt(match[1]); // Day
-                    const mStr = match[2].toLowerCase(); // Month part
-                    const y = parseInt(match[3]); // Year
-
-                    // Normalize month string (remove dots, trim, spaces)
-                    const normalizedMonth = mStr.replace(/[\.\s]/g, "");
-
-                    const monthMap: Record<string, number> = {
-                        มค: 0,
-                        กพ: 1,
-                        มีค: 2,
-                        เมย: 3,
-                        พค: 4,
-                        มิย: 5,
-                        กค: 6,
-                        สค: 7,
-                        กย: 8,
-                        ตค: 9,
-                        พย: 10,
-                        ธค: 11,
-                        มกราคม: 0,
-                        กุมภาพันธ์: 1,
-                        มีนาคม: 2,
-                        เมษายน: 3,
-                        พฤษภาคม: 4,
-                        มิถุนายน: 5,
-                        กรกฎาคม: 6,
-                        สิงหาคม: 7,
-                        กันยายน: 8,
-                        ตุลาคม: 9,
-                        พฤศจิกายน: 10,
-                        ธันวาคม: 11,
-                        jan: 0,
-                        feb: 1,
-                        mar: 2,
-                        apr: 3,
-                        may: 4,
-                        jun: 5,
-                        jul: 6,
-                        aug: 7,
-                        sep: 8,
-                        oct: 9,
-                        nov: 10,
-                        dec: 11,
-                        january: 0,
-                        february: 1,
-                        march: 2,
-                        april: 3,
-                        june: 5,
-                        july: 6,
-                        august: 7,
-                        september: 8,
-                        october: 9,
-                        november: 10,
-                        december: 11,
-                    };
-
-                    // Try direct match or partial match
-                    let monthIndex = monthMap[normalizedMonth];
-
-                    // If not found, try to find if any key is contained in normalizedMonth
-                    if (monthIndex === undefined) {
-                        for (const key in monthMap) {
-                            if (normalizedMonth.includes(key)) {
-                                monthIndex = monthMap[key];
-                                break;
-                            }
-                        }
-                    }
-
-                    if (monthIndex !== undefined) {
-                        let fullYear = 2000;
-                        if (y > 2500) {
-                            // BE Full
-                            fullYear = y - 543;
-                        } else if (y >= 2000) {
-                            // AD Full
-                            fullYear = y;
-                        } else {
-                            // Short Year
-                            // If > 50, likely BE short (68 -> 2568 -> 2025)
-                            // If < 50, likely AD short (25 -> 2025)
-                            if (y > 50) {
-                                fullYear = 2500 + y - 543;
-                            } else {
-                                fullYear = 2000 + y;
-                            }
-                        }
-
-                        // Validate date components
-                        if (
-                            d >= 1 &&
-                            d <= 31 &&
-                            monthIndex >= 0 &&
-                            monthIndex <= 11
-                        ) {
-                            const pad = (n: number) =>
-                                String(n).padStart(2, "0");
-                            const newDate = `${fullYear}-${pad(monthIndex + 1)}-${pad(d)}`;
-                            console.log(
-                                "OCR Extracted Date:",
-                                newDate,
-                                "from line:",
-                                line,
-                            );
-                            paidAt = newDate;
-                            foundDate = true;
-                        }
-                    }
-                    if (foundDate) break;
-                }
-            }
-
-            // --- 3. Extract Note/Memo ---
-            let extractedNote = "";
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                if (line.match(/(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)/i)) {
-                    let content = line
-                        .replace(
-                            /.*(?:บันทึกช่วยจำ|บันทึกช่วยจํา|Note|Memo)\s*[:.]?\s*/i,
-                            "",
-                        )
-                        .trim();
-
-                    if (!content && i + 1 < lines.length) {
-                        content = lines[i + 1].trim();
-                    }
-
-                    if (content) {
-                        extractedNote = content;
-                    }
-                    break;
-                }
-            }
-
-            if (extractedNote) {
-                notes = extractedNote;
-                description = extractedNote; // Map Memo to Description
-            }
-
-            await worker.terminate();
-        } catch (err) {
-            console.error("OCR Error:", err);
+            flashHighlights(extracted.highlightedFields);
+        } catch (error) {
+            console.error("OCR Error:", error);
         } finally {
             scanning = false;
         }
@@ -224,97 +87,39 @@
         const input = event.target as HTMLInputElement;
         previewUrls = [];
 
-        if (input.files && input.files.length > 0) {
-            const files = Array.from(input.files);
+        if (!input.files?.length) return;
 
-            // Run OCR on the first file if it exists
-            if (files[0]) {
-                processOCR(files[0]);
-            }
+        const files = Array.from(input.files);
+        if (files[0]) processOCR(files[0]);
 
-            files.forEach((file) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    if (e.target?.result) {
-                        previewUrls = [
-                            ...previewUrls,
-                            e.target.result as string,
-                        ];
-                    }
-                };
-                reader.readAsDataURL(file);
-            });
-        }
+        files.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = (loadEvent) => {
+                if (loadEvent.target?.result) {
+                    previewUrls = [...previewUrls, loadEvent.target.result as string];
+                }
+            };
+            reader.readAsDataURL(file);
+        });
     }
-
-    const expenseCategories = [
-        "อาหาร",
-        "เดินทาง",
-        "ของใช้",
-        "ที่พัก",
-        "สุขภาพ",
-        "บันเทิง",
-        "ช้อปปิ้ง",
-        "ค่าน้ำ",
-        "ค่าไฟ",
-        "ค่าโทรศัพท์",
-        "ค่าอินเตอร์เน็ต",
-        "ค่าสมาชิก/Sub",
-        "ค่าเช่าบ้าน",
-        "ค่าชาร์จรถ",
-        "ค่าน้ำมัน",
-        "ประกัน",
-        "การศึกษา",
-        "สัตว์เลี้ยง",
-        "บริจาค/ทำบุญ",
-    ];
-
-    const incomeCategories = [
-        "เงินเดือน",
-        "โบนัส",
-        "ฟรีแลนซ์",
-        "การลงทุน",
-        "ของขวัญ",
-        "เงินคืน",
-    ];
-
-    let category = data.expense.category || "Others";
-    let customCategory = "";
-    let isCustomCategory = false;
-    let description = data.expense.description;
-
-    // Check if existing category is not in the predefined list
-    $: {
-        const currentCategories =
-            transactionType === "income" ? incomeCategories : expenseCategories;
-        if (
-            category &&
-            !currentCategories.includes(category) &&
-            category !== "custom"
-        ) {
-            isCustomCategory = true;
-            customCategory = category;
-            category = "custom";
-        }
-    }
-
-    $: availableCategories =
-        transactionType === "income" ? incomeCategories : expenseCategories;
 </script>
 
-<div class="max-w-lg mx-auto">
-    <div class="flex items-center gap-4 mb-6">
+<div class="page-shell pb-40">
+    <div class="flex items-center gap-3 px-1">
         <a
-            href="/expenses/{data.expense.id}"
-            class="p-2 -ml-2 text-gray-500 hover:text-gray-900 transition rounded-full hover:bg-gray-100"
+            href={`/expenses/${data.expense.id}`}
+            class="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500"
         >
-            <ArrowLeft size={24} />
+            <ChevronLeft size={20} />
         </a>
-        <h1 class="text-2xl font-bold text-gray-800">แก้ไขรายการ</h1>
+        <div>
+            <p class="eyebrow">Edit</p>
+            <h1 class="text-2xl font-black text-slate-900 font-display">แก้ไขรายการ</h1>
+        </div>
     </div>
 
     {#if form?.error}
-        <div class="bg-red-50 text-red-600 p-4 rounded-lg mb-6 text-sm">
+        <div class="surface-card border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-700">
             {form.error}
         </div>
     {/if}
@@ -330,295 +135,117 @@
                 update();
             };
         }}
-        class="space-y-6 bg-white p-6 rounded-xl shadow-sm"
+        class="space-y-5"
     >
-        <!-- Type Toggle -->
-        <div class="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
-            <label class="cursor-pointer">
-                <input
-                    type="radio"
-                    name="transaction_type"
-                    value="income"
-                    bind:group={transactionType}
-                    class="sr-only"
-                />
-                <div
-                    class="flex items-center justify-center gap-2 py-2 rounded-lg transition-all {transactionType ===
-                    'income'
-                        ? 'bg-white text-green-600 shadow-sm font-bold'
-                        : 'text-gray-500 hover:text-gray-700'}"
-                >
-                    <ArrowDownLeft size={18} /> รายรับ
-                </div>
-            </label>
-            <label class="cursor-pointer">
-                <input
-                    type="radio"
-                    name="transaction_type"
-                    value="expense"
-                    bind:group={transactionType}
-                    class="sr-only"
-                />
-                <div
-                    class="flex items-center justify-center gap-2 py-2 rounded-lg transition-all {transactionType ===
-                    'expense'
-                        ? 'bg-white text-red-600 shadow-sm font-bold'
-                        : 'text-gray-500 hover:text-gray-700'}"
-                >
-                    <ArrowUpRight size={18} /> รายจ่าย
-                </div>
-            </label>
-        </div>
-
-        <!-- Project -->
-        <div>
-            <label
-                for="project_id"
-                class="block text-sm font-medium text-gray-700 mb-1"
-                >โปรเจค</label
-            >
-            <select
-                name="project_id"
-                id="project_id"
-                required
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                value={data.expense.project_id}
-            >
-                {#each data.projects as project}
-                    <option value={project.id}>{project.name}</option>
-                {/each}
-            </select>
-        </div>
-
-        <!-- Date -->
-        <div>
-            <label
-                for="paid_at"
-                class="block text-sm font-medium text-gray-700 mb-1"
-            >
-                {transactionType === "expense" ? "วันที่จ่าย" : "วันที่รับเงิน"}
-            </label>
-            <input
-                type="date"
-                name="paid_at"
-                id="paid_at"
-                required
-                bind:value={paidAt}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
-                    ? 'bg-indigo-50 animate-pulse'
-                    : ''}"
-            />
-        </div>
-
-        <!-- Person (auto-set from logged-in user) -->
-        <input type="hidden" name="paid_by" value={data.currentProfileId || ''} />
-        <div>
-            <div
-                class="block text-sm font-medium text-gray-700 mb-1"
-            >
-                {transactionType === "expense" ? "ผู้สำรองจ่าย" : "ผู้รับเงิน"}
+        <section class="surface-card p-2">
+            <div class="grid grid-cols-2 gap-2">
+                <label class="cursor-pointer">
+                    <input type="radio" class="sr-only" name="transaction_type" value="expense" bind:group={transactionType} />
+                    <div class={`flex items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-bold transition ${
+                        transactionType === "expense" ? "bg-slate-900 text-white" : "bg-white text-slate-500"
+                    }`}>
+                        <ArrowUpRight size={18} />
+                        รายจ่าย
+                    </div>
+                </label>
+                <label class="cursor-pointer">
+                    <input type="radio" class="sr-only" name="transaction_type" value="income" bind:group={transactionType} />
+                    <div class={`flex items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-bold transition ${
+                        transactionType === "income" ? "bg-emerald-600 text-white" : "bg-white text-slate-500"
+                    }`}>
+                        <ArrowDownLeft size={18} />
+                        รายรับ
+                    </div>
+                </label>
             </div>
-            <div class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 flex items-center gap-3">
-                {#if data.currentUser?.avatar_url}
-                    <img src={data.currentUser.avatar_url} alt="" class="w-7 h-7 rounded-full object-cover" referrerpolicy="no-referrer" />
+        </section>
+
+        <section class="surface-card p-5">
+            <div class="mb-3 flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-black text-slate-900 font-display">จำนวนเงิน</h2>
+                    <p class="text-sm text-slate-500">แก้ยอดให้ถูกก่อน แล้วรายการย่อยจะตามมาเอง</p>
+                </div>
+                {#if scanning}
+                    <div class="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                        <ScanLine size={13} class="animate-spin" />
+                        กำลังอ่านสลิป
+                    </div>
                 {/if}
-                <span class="text-sm text-gray-700 font-medium">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</span>
             </div>
-        </div>
 
-        <!-- Amount -->
-        <div>
-            <label
-                for="amount"
-                class="block text-sm font-medium text-gray-700 mb-1"
-                >จำนวนเงิน (บาท)</label
-            >
-            <input
-                type="number"
-                name="amount"
-                id="amount"
-                required
-                min="0"
-                step="0.01"
-                bind:value={amount}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
-                    ? 'bg-indigo-50 animate-pulse'
-                    : ''}"
-                placeholder="0.00"
-            />
-        </div>
-
-        <!-- Category -->
-        <div>
-            <label
-                for="category"
-                class="block text-sm font-medium text-gray-700 mb-1"
-                >หมวดหมู่</label
-            >
-            <select
-                id="category-select"
-                bind:value={category}
-                on:change={(e) => {
-                    if (e.currentTarget.value === "custom") {
-                        isCustomCategory = true;
-                    } else {
-                        isCustomCategory = false;
-                        customCategory = "";
-                    }
-                }}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-            >
-                <option value="">-- เลือกหมวดหมู่ --</option>
-                {#each availableCategories as cat}
-                    <option value={cat}>{cat}</option>
-                {/each}
-                <option value="custom">➕ อื่นๆ (พิมพ์เอง)</option>
-            </select>
-
-            {#if isCustomCategory}
+            <label class="field-label" for="amount">จำนวนเงิน (บาท)</label>
+            <div class="relative">
                 <input
-                    type="text"
-                    bind:value={customCategory}
-                    placeholder="พิมพ์หมวดหมู่ใหม่..."
-                    class="w-full mt-2 border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    id="amount"
+                    name="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    bind:value={amount}
+                    class={`field-input-hero pr-14 ${isHighlighted("amount") ? "border-indigo-300 bg-indigo-50 text-indigo-700" : ""}`}
                 />
-            {/if}
+                <span class="absolute right-5 top-1/2 -translate-y-1/2 text-lg font-bold text-slate-300">฿</span>
+            </div>
+        </section>
 
-            <!-- Hidden input to submit actual category value -->
-            <input
-                type="hidden"
-                name="category"
-                value={isCustomCategory ? customCategory : category}
-            />
-        </div>
+        <section class="surface-card p-5">
+            <div class="mb-4">
+                <h2 class="text-lg font-black text-slate-900 font-display">หลักฐาน / สลิป</h2>
+                <p class="text-sm text-slate-500">เพิ่มรูปใหม่ได้ และระบบจะช่วยเติมข้อมูลจากรูปแรกที่อัปโหลด</p>
+            </div>
 
-        <!-- Description -->
-        <div>
-            <label
-                for="description"
-                class="block text-sm font-medium text-gray-700 mb-1"
-                >รายละเอียด</label
-            >
-            <input
-                type="text"
-                name="description"
-                id="description"
-                required
-                bind:value={description}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="ค่าอะไร..."
-            />
-        </div>
-
-        <!-- Note -->
-        <div>
-            <label
-                for="notes"
-                class="block text-sm font-medium text-gray-700 mb-1"
-                >หมายเหตุ (ไม่บังคับ)</label
-            >
-            <input
-                type="text"
-                name="notes"
-                id="notes"
-                bind:value={notes}
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-colors {scanning
-                    ? 'bg-indigo-50 animate-pulse'
-                    : ''}"
-                placeholder="รายละเอียดเพิ่มเติม..."
-            />
-        </div>
-
-        <!-- Proof Images -->
-        <div>
-            <label
-                for="proof_images"
-                class="block text-sm font-medium text-gray-700 mb-1"
-                >รูปหลักฐาน (เพิ่มรูปใหม่)</label
-            >
             <input
                 type="file"
-                name="proof_images"
                 id="proof_images"
-                accept="image/png, image/jpeg"
+                name="proof_images"
+                accept="image/png, image/jpeg, image/webp, image/heic"
                 multiple
+                class="sr-only"
                 on:change={handleFileChange}
-                class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
             />
-            <p class="mt-1 text-xs text-gray-500">
-                PNG, JPG ไม่เกิน 5MB ต่อรูป
-            </p>
-            {#if scanning}
-                <div
-                    class="mt-2 text-indigo-600 flex items-center gap-2 text-sm"
-                >
-                    <ScanLine class="animate-spin" size={16} /> กำลังอ่านข้อมูลจากสลิป...
-                </div>
-            {/if}
 
-            <!-- New Previews -->
+            <label
+                for="proof_images"
+                class="flex cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center transition hover:border-indigo-300 hover:bg-indigo-50"
+            >
+                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                    <ImageIcon size={22} />
+                </div>
+                <div>
+                    <div class="text-base font-bold text-slate-900">เพิ่มรูปหลักฐานใหม่</div>
+                    <p class="mt-1 text-sm text-slate-500">รูปเดิมยังอยู่จนกว่าจะลบออกเอง</p>
+                </div>
+            </label>
+
             {#if previewUrls.length > 0}
-                <div class="mt-2 mb-4">
-                    <div class="text-xs text-gray-500 mb-1">
-                        รูปที่กำลังจะอัพโหลด:
-                    </div>
-                    <div class="grid grid-cols-3 gap-2">
-                        {#each previewUrls as url, i}
-                            <div
-                                class="relative rounded-lg overflow-hidden border border-gray-200 aspect-square"
-                            >
-                                <img
-                                    src={url}
-                                    alt="New Preview {i}"
-                                    class="w-full h-full object-cover"
-                                />
-                            </div>
-                        {/each}
-                    </div>
-                    <button
-                        type="button"
-                        class="text-xs text-red-500 mt-1 hover:underline"
-                        on:click={() => {
-                            previewUrls = [];
-                            const input = document.getElementById(
-                                "proof_images",
-                            ) as HTMLInputElement;
-                            if (input) input.value = "";
-                        }}
-                    >
-                        ยกเลิกรูปใหม่ทั้งหมด
-                    </button>
+                <div class="mt-4 grid grid-cols-3 gap-3">
+                    {#each previewUrls as url, index}
+                        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                            <img src={url} alt={`New proof ${index + 1}`} class="h-24 w-full object-cover" />
+                        </div>
+                    {/each}
                 </div>
             {/if}
 
-            <!-- Existing Attachments -->
-            {#if data.expense.attachments && data.expense.attachments.length > 0}
-                <div class="mt-4">
-                    <div class="text-xs text-gray-500 mb-2">
-                        รูปที่มีอยู่แล้ว:
-                    </div>
-                    <div class="grid grid-cols-3 gap-2">
+            {#if data.expense.attachments?.length}
+                <div class="mt-5">
+                    <div class="mb-3 text-sm font-semibold text-slate-600">รูปที่มีอยู่แล้ว</div>
+                    <div class="grid grid-cols-3 gap-3">
                         {#each data.expense.attachments as attachment}
-                            <div
-                                class="relative group rounded-lg overflow-hidden border border-gray-200 aspect-square"
-                            >
-                                <img
-                                    src={attachment.file_url}
-                                    alt="Attachment"
-                                    class="w-full h-full object-cover"
-                                />
+                            <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                                <img src={attachment.file_url} alt="Attachment" class="h-24 w-full object-cover" />
                                 <button
                                     type="submit"
                                     formaction="?/deleteAttachment"
                                     name="attachment_id"
                                     value={attachment.id}
-                                    class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 shadow-sm"
+                                    class="absolute right-2 top-2 rounded-full bg-rose-600 p-2 text-white shadow-sm"
                                     title="ลบรูปนี้"
-                                    on:click={(e) => {
-                                        if (
-                                            !confirm("ต้องการลบรูปนี้ใช่ไหม?")
-                                        ) {
-                                            e.preventDefault();
+                                    on:click={(event) => {
+                                        if (!confirm("ต้องการลบรูปนี้ใช่ไหม?")) {
+                                            event.preventDefault();
                                         }
                                     }}
                                 >
@@ -628,46 +255,134 @@
                         {/each}
                     </div>
                 </div>
-            {:else if data.expense.proof_image_url}
-                <!-- Fallback for old data -->
-                <div class="mt-4">
-                    <div class="text-xs text-gray-500 mb-2">
-                        รูปที่มีอยู่แล้ว (เก่า):
-                    </div>
-                    <div
-                        class="relative rounded-lg overflow-hidden border border-gray-200 w-24 h-24"
+            {/if}
+        </section>
+
+        <section class="surface-card p-5">
+            <div class="mb-4">
+                <h2 class="text-lg font-black text-slate-900 font-display">รายละเอียดรายการ</h2>
+                <p class="text-sm text-slate-500">รูปแบบเดียวกับหน้าเพิ่มรายการ เพื่อให้แก้ได้ต่อเนื่องโดยไม่ต้องปรับตัว</p>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="field-label" for="description">รายละเอียด</label>
+                    <input
+                        id="description"
+                        name="description"
+                        type="text"
+                        required
+                        bind:value={description}
+                        class={`field-input ${isHighlighted("description") ? "border-indigo-300 bg-indigo-50" : ""}`}
+                    />
+                </div>
+
+                <div>
+                    <label class="field-label" for="project_id">โปรเจค</label>
+                    <select id="project_id" name="project_id" required class="field-input" value={data.expense.project_id}>
+                        {#each data.projects as project}
+                            <option value={project.id}>{project.name}</option>
+                        {/each}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="field-label" for="paid_at">{transactionType === "expense" ? "วันที่จ่าย" : "วันที่รับเงิน"}</label>
+                    <input
+                        id="paid_at"
+                        name="paid_at"
+                        type="date"
+                        required
+                        bind:value={paidAt}
+                        class={`field-input ${isHighlighted("date") ? "border-indigo-300 bg-indigo-50" : ""}`}
+                    />
+                </div>
+
+                <div>
+                    <label class="field-label" for="category-select">หมวดหมู่</label>
+                    <select
+                        id="category-select"
+                        bind:value={category}
+                        class="field-input"
+                        on:change={(event) => {
+                            const value = (event.currentTarget as HTMLSelectElement).value;
+                            if (value === "custom") {
+                                isCustomCategory = true;
+                            } else {
+                                isCustomCategory = false;
+                                customCategory = "";
+                            }
+                        }}
                     >
-                        <img
-                            src={data.expense.proof_image_url}
-                            alt="Old Proof"
-                            class="w-full h-full object-cover"
+                        <option value="">เลือกหมวดหมู่</option>
+                        {#each availableCategories as item}
+                            <option value={item}>{item}</option>
+                        {/each}
+                        <option value="custom">พิมพ์หมวดหมู่เอง</option>
+                    </select>
+                    {#if isCustomCategory}
+                        <input
+                            type="text"
+                            bind:value={customCategory}
+                            class="field-input mt-3"
+                            placeholder="หมวดหมู่ที่ต้องการใช้"
                         />
+                    {/if}
+                    <input type="hidden" name="category" value={submittedCategory} />
+                </div>
+
+                <div>
+                    <label class="field-label" for="notes">หมายเหตุ (ไม่บังคับ)</label>
+                    <textarea
+                        id="notes"
+                        name="notes"
+                        bind:value={notes}
+                        class={`field-input min-h-[96px] ${isHighlighted("notes") ? "border-indigo-300 bg-indigo-50" : ""}`}
+                    ></textarea>
+                </div>
+
+                <input type="hidden" name="paid_by" value={data.currentProfileId || ""} />
+                <div>
+                    <div class="field-label">{transactionType === "expense" ? "ผู้สำรองจ่าย" : "ผู้รับเงิน"}</div>
+                    <div class="identity-chip">
+                        {#if data.currentUser?.avatar_url}
+                            <img
+                                src={data.currentUser.avatar_url}
+                                alt=""
+                                class="h-8 w-8 rounded-full object-cover"
+                                referrerpolicy="no-referrer"
+                            />
+                        {/if}
+                        <div>
+                            <div class="font-semibold text-slate-800">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</div>
+                            <div class="text-xs text-slate-500">ล็อกตามบัญชีผู้ใช้ปัจจุบัน</div>
+                        </div>
                     </div>
                 </div>
-            {/if}
-        </div>
+            </div>
+        </section>
 
-        <!-- Submit -->
-        <div class="pt-4 flex gap-3">
-            <a
-                href="/expenses/{data.expense.id}"
-                class="flex-1 py-2.5 text-center border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition"
-                >ยกเลิก</a
-            >
-            <button
-                type="submit"
-                disabled={loading}
-                class="flex-1 text-white py-2.5 rounded-lg font-bold hover:opacity-90 transition flex justify-center items-center gap-2 disabled:opacity-70 {transactionType ===
-                'expense'
-                    ? 'bg-red-600'
-                    : 'bg-green-600'}"
-            >
-                {#if loading}
-                    <Loader2 class="animate-spin" size={18} /> บันทึก...
-                {:else}
-                    บันทึกการแก้ไข
-                {/if}
-            </button>
+        <div class="sticky-action-bar">
+            <div class="mx-auto flex max-w-md gap-3">
+                <a
+                    href={`/expenses/${data.expense.id}`}
+                    class="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-600"
+                >
+                    ยกเลิก
+                </a>
+                <button
+                    type="submit"
+                    disabled={loading}
+                    class="flex flex-[1.3] items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                    {#if loading}
+                        <Loader2 size={18} class="animate-spin" />
+                        กำลังบันทึก...
+                    {:else}
+                        บันทึกการแก้ไข
+                    {/if}
+                </button>
+            </div>
         </div>
     </form>
 </div>

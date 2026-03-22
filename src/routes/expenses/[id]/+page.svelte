@@ -3,408 +3,377 @@
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import { formatDate } from "$lib/utils/formatDate";
     import {
-        ArrowLeft,
-        CheckCircle,
-        XCircle,
-        Calendar,
-        User,
-        FileText,
+        CheckCircle2,
+        ChevronLeft,
+        Clock3,
         ExternalLink,
+        FileText,
         Loader2,
+        MoreHorizontal,
         Pencil,
+        Receipt,
         Trash2,
+        User,
+        Wallet,
+        X,
     } from "lucide-svelte";
+    import { fade, fly, scale } from "svelte/transition";
 
     export let data;
-    $: ({ expense, profiles } = data);
 
-    let showReimburseModal = false;
+    let showReimburseSheet = false;
+    let showActions = false;
     let loading = false;
     let reimburseProofPreviewUrl: string | null = null;
 
     function handleReimburseFileChange(event: Event) {
         const input = event.target as HTMLInputElement;
-        if (input.files && input.files[0]) {
-            const file = input.files[0];
+        if (input.files?.[0]) {
             const reader = new FileReader();
-            reader.onload = (e) => {
-                reimburseProofPreviewUrl = e.target?.result as string;
+            reader.onload = (loadEvent) => {
+                reimburseProofPreviewUrl = loadEvent.target?.result as string;
             };
-            reader.readAsDataURL(file);
+            reader.readAsDataURL(input.files[0]);
         } else {
             reimburseProofPreviewUrl = null;
         }
     }
 </script>
 
-<div class="max-w-lg mx-auto space-y-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
+<div class="page-shell pb-40">
+    <div class="flex items-center justify-between gap-3 px-1">
+        <div class="flex items-center gap-3">
             <a
                 href="/expenses"
-                class="p-2 -ml-2 text-gray-500 hover:text-gray-900 transition rounded-full hover:bg-gray-100"
+                class="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500"
             >
-                <ArrowLeft size={24} />
+                <ChevronLeft size={20} />
             </a>
-            <h1 class="text-xl font-bold text-gray-800">รายละเอียด</h1>
+            <div>
+                <p class="eyebrow">Detail</p>
+                <h1 class="text-2xl font-black text-slate-900 font-display">รายละเอียดรายการ</h1>
+            </div>
         </div>
 
-        <div class="flex gap-2">
-            <a
-                href="/expenses/{expense.id}/edit"
-                class="p-2 text-gray-500 hover:text-indigo-600 transition rounded-full hover:bg-indigo-50"
-                title="แก้ไข"
+        <div class="relative">
+            <button
+                type="button"
+                class="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500"
+                aria-label="Open actions"
+                on:click={() => (showActions = !showActions)}
             >
-                <Pencil size={20} />
-            </a>
-            <form
-                action="?/delete"
-                method="POST"
-                use:enhance={({ cancel }) => {
-                    if (!confirm("คุณแน่ใจหรือไม่ที่จะลบรายการนี้?")) {
-                        cancel();
-                    }
-                }}
-            >
-                <button
-                    type="submit"
-                    class="p-2 text-gray-500 hover:text-red-600 transition rounded-full hover:bg-red-50"
-                    title="ลบ"
-                >
-                    <Trash2 size={20} />
-                </button>
-            </form>
+                <MoreHorizontal size={18} />
+            </button>
+
+            {#if showActions}
+                <div class="absolute right-0 top-12 z-20 w-48 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-xl" in:scale out:fade>
+                    <a href={`/expenses/${data.expense.id}/edit`} class="flex items-center gap-3 px-4 py-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                        <Pencil size={16} />
+                        แก้ไขรายการ
+                    </a>
+                    <form
+                        action="?/delete"
+                        method="POST"
+                        use:enhance={({ cancel }) => {
+                            if (!confirm("คุณแน่ใจหรือไม่ที่จะลบรายการนี้?")) cancel();
+                        }}
+                    >
+                        <button type="submit" class="flex w-full items-center gap-3 px-4 py-4 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50">
+                            <Trash2 size={16} />
+                            ลบรายการ
+                        </button>
+                    </form>
+                </div>
+            {/if}
         </div>
     </div>
 
-    <!-- Status Card -->
-    <div
-        class="bg-white rounded-xl shadow-sm p-6 border-l-4 {expense.is_reimbursed
-            ? 'border-green-500'
-            : 'border-red-500'}"
-    >
-        <div class="flex justify-between items-start">
-            <div>
-                <div class="text-sm text-gray-500 mb-1">สถานะ</div>
-                <div
-                    class="font-bold text-lg flex items-center gap-2 {expense.is_reimbursed
-                        ? 'text-green-600'
-                        : 'text-red-600'}"
-                >
-                    {#if expense.is_reimbursed}
-                        <CheckCircle size={20} /> เคลียร์แล้ว
-                    {:else}
-                        <XCircle size={20} /> ยังไม่เคลียร์
-                    {/if}
-                </div>
-                {#if expense.is_reimbursed && expense.reimbursed_at}
-                    <div class="text-xs text-gray-400 mt-1">
-                        เมื่อ {formatDate(expense.reimbursed_at)}
-                        {#if expense.reimburser}
-                            โดย {expense.reimburser.display_name}
-                        {/if}
-                    </div>
-                {/if}
-            </div>
-            <div class="text-right">
-                <div class="text-sm text-gray-500 mb-1">ยอดเงิน</div>
-                <div class="text-2xl font-bold text-gray-900">
-                    {formatCurrency(expense.amount)}
-                </div>
-            </div>
+    <section class={`overflow-hidden rounded-[32px] p-6 text-white premium-shadow ${
+        data.actionState.canReimburse ? "bg-gradient-to-br from-amber-500 to-orange-600" : "bg-gradient-to-br from-emerald-600 to-emerald-700"
+    }`}>
+        <div class="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold">
+            <Wallet size={13} />
+            {data.actionState.statusLabel}
         </div>
-    </div>
 
-    <!-- Details -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div class="p-6 space-y-4">
+        <div class="flex items-start justify-between gap-4">
             <div>
-                <h3 class="text-sm font-medium text-gray-500 mb-1">รายการ</h3>
-                <p class="text-lg font-medium text-gray-900">
-                    {expense.description}
+                <div class="text-4xl font-black font-display tracking-tight">{formatCurrency(data.expense.amount)}</div>
+                <h2 class="mt-3 text-2xl font-black font-display">{data.expense.description}</h2>
+                <p class="mt-2 max-w-[28ch] text-sm text-white/80">
+                    {data.actionState.canReimburse
+                        ? "รายการนี้ยังอยู่ในคิวที่ต้องเคลียร์ ถ้าจ่ายคืนแล้วให้ยืนยันจากปุ่มด้านล่าง"
+                        : "รายการนี้ปิดเรียบร้อยแล้ว รายละเอียดการคืนเงินและหลักฐานอยู่ด้านล่าง"}
                 </p>
             </div>
+            <div class="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
+                {data.expense.projects?.name || "ไม่ระบุโปรเจค"}
+            </div>
+        </div>
+    </section>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <h3
-                        class="text-sm font-medium text-gray-500 mb-1 flex items-center gap-1"
-                    >
-                        <Calendar size={14} /> วันที่จ่าย
-                    </h3>
-                    <p class="text-gray-900">{formatDate(expense.paid_at)}</p>
+    <section class="surface-card p-5">
+        <div class="mb-4">
+            <h2 class="text-lg font-black text-slate-900 font-display">ข้อมูลหลัก</h2>
+            <p class="text-sm text-slate-500">เช็ก metadata สำคัญก่อนทำ action ต่อ</p>
+        </div>
+
+        <div class="grid gap-3">
+            <div class="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-600">
+                    <Clock3 size={16} />
                 </div>
                 <div>
-                    <h3
-                        class="text-sm font-medium text-gray-500 mb-1 flex items-center gap-1"
-                    >
-                        <User size={14} /> ผู้สำรองจ่าย
-                    </h3>
-                    <p class="text-gray-900">
-                        {expense.profiles?.display_name || "ไม่ระบุ"}
-                    </p>
+                    <div class="text-sm font-semibold text-slate-900">{formatDate(data.expense.paid_at)}</div>
+                    <div class="text-sm text-slate-500">{data.expense.transaction_type === "expense" ? "วันที่จ่าย" : "วันที่รับเงิน"}</div>
                 </div>
             </div>
 
-            <div>
-                <h3 class="text-sm font-medium text-gray-500 mb-1">โปรเจค</h3>
-                <span
-                    class="inline-block bg-gray-100 px-3 py-1 rounded-full text-sm text-gray-700 font-medium"
-                >
-                    {expense.projects?.name}
-                </span>
+            <div class="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-600">
+                    <User size={16} />
+                </div>
+                <div>
+                    <div class="text-sm font-semibold text-slate-900">{data.expense.profiles?.display_name || "ไม่ระบุ"}</div>
+                    <div class="text-sm text-slate-500">{data.expense.transaction_type === "expense" ? "ผู้สำรองจ่าย" : "ผู้รับเงิน"}</div>
+                </div>
             </div>
 
-            {#if expense.category}
-                <div>
-                    <h3 class="text-sm font-medium text-gray-500 mb-1">
-                        หมวดหมู่
-                    </h3>
-                    <span
-                        class="inline-block bg-indigo-50 px-3 py-1 rounded-full text-sm text-indigo-700 font-medium"
-                    >
-                        {expense.category}
-                    </span>
+            {#if data.expense.category}
+                <div class="rounded-2xl bg-slate-50 px-4 py-3">
+                    <div class="text-sm text-slate-500">หมวดหมู่</div>
+                    <div class="mt-1 text-sm font-semibold text-slate-900">{data.expense.category}</div>
                 </div>
             {/if}
 
-            {#if expense.notes}
-                <div>
-                    <h3 class="text-sm font-medium text-gray-500 mb-1">
-                        หมายเหตุ
-                    </h3>
-                    <p class="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm">
-                        {expense.notes}
-                    </p>
+            {#if data.expense.notes}
+                <div class="rounded-2xl bg-slate-50 px-4 py-3">
+                    <div class="text-sm text-slate-500">หมายเหตุ</div>
+                    <div class="mt-1 text-sm font-medium text-slate-700">{data.expense.notes}</div>
                 </div>
             {/if}
         </div>
+    </section>
 
-        <!-- Expense Proof Images (Gallery) -->
-        {#if expense.attachments && expense.attachments.length > 0}
-            <div class="border-t border-gray-100 p-6">
-                <h3
-                    class="text-sm font-medium text-gray-500 mb-3 flex items-center gap-1"
-                >
-                    <FileText size={14} /> หลักฐานการจ่าย ({expense.attachments
-                        .length} รูป)
-                </h3>
-                <div class="grid grid-cols-2 gap-2">
-                    {#each expense.attachments as attachment}
-                        <div
-                            class="relative group rounded-lg overflow-hidden border border-gray-200 aspect-square"
-                        >
-                            <img
-                                src={attachment.file_url}
-                                alt="Proof"
-                                class="w-full h-full object-cover"
-                            />
-                            <a
-                                href={attachment.file_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition opacity-0 group-hover:opacity-100"
-                            >
-                                <ExternalLink size={16} />
-                            </a>
+    <section class="surface-card p-5">
+        <div class="mb-4">
+            <h2 class="text-lg font-black text-slate-900 font-display">Timeline</h2>
+            <p class="text-sm text-slate-500">สรุปลำดับเหตุการณ์ของรายการนี้แบบสั้นและชัด</p>
+        </div>
+
+        <div class="space-y-4">
+            <div class="flex gap-3">
+                <div class="mt-1 h-3 w-3 rounded-full bg-indigo-500"></div>
+                <div>
+                    <div class="text-sm font-semibold text-slate-900">สร้างรายการ</div>
+                    <div class="text-sm text-slate-500">{formatDate(data.expense.paid_at)}</div>
+                </div>
+            </div>
+
+            {#if data.expense.is_reimbursed && data.expense.reimbursed_at}
+                <div class="flex gap-3">
+                    <div class="mt-1 h-3 w-3 rounded-full bg-emerald-500"></div>
+                    <div>
+                        <div class="text-sm font-semibold text-slate-900">เคลียร์ยอดแล้ว</div>
+                        <div class="text-sm text-slate-500">
+                            {formatDate(data.expense.reimbursed_at)}
+                            {#if data.expense.reimburser}
+                                • โดย {data.expense.reimburser.display_name}
+                            {/if}
                         </div>
-                    {/each}
+                    </div>
                 </div>
-            </div>
-        {:else if expense.proof_image_url}
-            <!-- Fallback for old data -->
-            <div class="border-t border-gray-100 p-6">
-                <h3
-                    class="text-sm font-medium text-gray-500 mb-3 flex items-center gap-1"
-                >
-                    <FileText size={14} /> หลักฐานการจ่าย
-                </h3>
-                <div
-                    class="relative group rounded-lg overflow-hidden border border-gray-200"
-                >
-                    <img
-                        src={expense.proof_image_url}
-                        alt="Proof"
-                        class="w-full h-auto object-cover max-h-96"
-                    />
+            {/if}
+
+            {#if data.expense.attachments?.length || data.expense.proof_image_url}
+                <div class="flex gap-3">
+                    <div class="mt-1 h-3 w-3 rounded-full bg-slate-400"></div>
+                    <div>
+                        <div class="text-sm font-semibold text-slate-900">แนบหลักฐานการจ่าย</div>
+                        <div class="text-sm text-slate-500">
+                            {data.expense.attachments?.length ? `${data.expense.attachments.length} รูป` : "มีหลักฐาน 1 รูป"}
+                        </div>
+                    </div>
+                </div>
+            {/if}
+        </div>
+    </section>
+
+    <section class="surface-card p-5">
+        <div class="mb-4">
+            <h2 class="text-lg font-black text-slate-900 font-display">หลักฐาน</h2>
+            <p class="text-sm text-slate-500">รวมรูปหลักฐานการจ่ายและการโอนคืนไว้ในที่เดียว</p>
+        </div>
+
+        {#if data.expense.attachments?.length}
+            <div class="grid grid-cols-2 gap-3">
+                {#each data.expense.attachments as attachment}
                     <a
-                        href={expense.proof_image_url}
+                        href={attachment.file_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition opacity-0 group-hover:opacity-100"
+                        class="group overflow-hidden rounded-[24px] border border-slate-200 bg-slate-100"
                     >
-                        <ExternalLink size={16} />
+                        <img src={attachment.file_url} alt="Proof" class="h-40 w-full object-cover transition group-hover:scale-105" />
+                        <div class="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700">
+                            หลักฐานการจ่าย
+                            <ExternalLink size={14} />
+                        </div>
                     </a>
-                </div>
+                {/each}
             </div>
+        {:else if data.expense.proof_image_url}
+            <a
+                href={data.expense.proof_image_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="group block overflow-hidden rounded-[24px] border border-slate-200 bg-slate-100"
+            >
+                <img src={data.expense.proof_image_url} alt="Proof" class="max-h-80 w-full object-cover transition group-hover:scale-105" />
+                <div class="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700">
+                    หลักฐานการจ่าย
+                    <ExternalLink size={14} />
+                </div>
+            </a>
         {/if}
 
-        <!-- Reimbursement Proof Image -->
-        {#if expense.reimbursement_proof_url}
-            <div class="border-t border-gray-100 p-6 bg-green-50">
-                <h3
-                    class="text-sm font-medium text-green-700 mb-3 flex items-center gap-1"
-                >
-                    <CheckCircle size={14} /> หลักฐานการโอนคืน
-                </h3>
-                <div
-                    class="relative group rounded-lg overflow-hidden border border-green-200"
-                >
-                    <img
-                        src={expense.reimbursement_proof_url}
-                        alt="Reimbursement Proof"
-                        class="w-full h-auto object-cover max-h-96"
-                    />
-                    <a
-                        href={expense.reimbursement_proof_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition opacity-0 group-hover:opacity-100"
-                    >
-                        <ExternalLink size={16} />
-                    </a>
+        {#if data.expense.reimbursement_proof_url}
+            <a
+                href={data.expense.reimbursement_proof_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="group mt-3 block overflow-hidden rounded-[24px] border border-emerald-200 bg-emerald-50"
+            >
+                <img
+                    src={data.expense.reimbursement_proof_url}
+                    alt="Reimbursement proof"
+                    class="max-h-80 w-full object-cover transition group-hover:scale-105"
+                />
+                <div class="flex items-center justify-between px-4 py-3 text-sm font-semibold text-emerald-700">
+                    หลักฐานการโอนคืน
+                    <ExternalLink size={14} />
                 </div>
-            </div>
+            </a>
         {/if}
-    </div>
+    </section>
 
-    <!-- Actions -->
-    <div class="pb-8">
-        {#if !expense.is_reimbursed}
-            <button
-                on:click={() => (showReimburseModal = true)}
-                class="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-green-700 transition flex justify-center items-center gap-2"
-            >
-                <CheckCircle /> ทำเครื่องหมายว่าเคลียร์แล้ว
-            </button>
-        {:else}
-            <form
-                action="/expenses/{expense.id}?/unreimburse"
-                method="POST"
-                use:enhance
-            >
+    <div class="sticky-action-bar">
+        <div class="mx-auto max-w-md">
+            {#if data.actionState.canReimburse}
                 <button
-                    class="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-medium hover:bg-gray-200 transition text-sm"
+                    type="button"
+                    class="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"
+                    on:click={() => (showReimburseSheet = true)}
                 >
-                    ยกเลิกสถานะเคลียร์แล้ว (กลับไปเป็นหนี้)
+                    <CheckCircle2 size={18} />
+                    ทำเครื่องหมายว่าเคลียร์แล้ว
                 </button>
-            </form>
-        {/if}
+            {:else if data.expense.transaction_type === "expense"}
+                <div class="space-y-2">
+                    <div class="rounded-2xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
+                        รายการนี้เคลียร์เรียบร้อยแล้ว
+                    </div>
+                    <form action={`/expenses/${data.expense.id}?/unreimburse`} method="POST" use:enhance>
+                        <button type="submit" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600">
+                            ย้อนกลับเป็นยังไม่เคลียร์
+                        </button>
+                    </form>
+                </div>
+            {/if}
+        </div>
     </div>
 </div>
 
-<!-- Reimburse Modal -->
-{#if showReimburseModal}
-    <div
-        class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-    >
-        <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 class="text-lg font-bold mb-4">ยืนยันการเคลียร์ยอด</h3>
-            <form
-                action="/expenses/{expense.id}?/reimburse"
-                method="POST"
-                enctype="multipart/form-data"
-                use:enhance={() => {
-                    loading = true;
-                    return async ({ update }) => {
-                        loading = false;
-                        showReimburseModal = false;
-                        update();
-                    };
-                }}
+{#if showReimburseSheet}
+    <button
+        type="button"
+        class="fixed inset-0 z-[60] bg-slate-950/35 backdrop-blur-sm"
+        aria-label="Close reimburse sheet"
+        on:click={() => (showReimburseSheet = false)}
+        in:fade
+        out:fade
+    ></button>
+
+    <div class="sheet-panel max-w-md mx-auto" in:fly={{ y: 20, duration: 180 }} out:fly={{ y: 20, duration: 140 }}>
+        <div class="mb-5 flex items-center justify-between">
+            <div>
+                <p class="eyebrow">Settlement</p>
+                <h2 class="text-xl font-black text-slate-900 font-display">ยืนยันการเคลียร์ยอด</h2>
+            </div>
+            <button
+                type="button"
+                class="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-500"
+                aria-label="Close reimburse sheet"
+                on:click={() => (showReimburseSheet = false)}
             >
-                <div class="mb-4">
-                    <div
-                        class="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                        ใครเป็นคนคืนเงิน?
-                    </div>
-                    <input type="hidden" name="reimbursed_by" value={data.currentProfileId || ''} />
-                    <div class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 flex items-center gap-3">
-                        {#if data.currentUser?.avatar_url}
-                            <img src={data.currentUser.avatar_url} alt="" class="w-7 h-7 rounded-full object-cover" referrerpolicy="no-referrer" />
-                        {/if}
-                        <span class="text-sm text-gray-700 font-medium">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</span>
-                    </div>
-                </div>
-
-                <div class="mb-6">
-                    <label
-                        for="proof_image"
-                        class="block text-sm font-medium text-gray-700 mb-1"
-                        >สลิปโอนเงิน (ถ้ามี)</label
-                    >
-                    <input
-                        type="file"
-                        name="proof_image"
-                        id="proof_image"
-                        accept="image/png, image/jpeg"
-                        class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
-                        on:change={handleReimburseFileChange}
-                    />
-                    {#if reimburseProofPreviewUrl}
-                        <div
-                            class="mt-2 relative rounded-lg overflow-hidden border border-gray-200 w-full max-w-xs"
-                        >
-                            <img
-                                src={reimburseProofPreviewUrl}
-                                alt="Preview"
-                                class="w-full h-auto object-cover"
-                            />
-                            <button
-                                type="button"
-                                class="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70"
-                                on:click={() => {
-                                    reimburseProofPreviewUrl = null;
-                                    const input = document.getElementById(
-                                        "proof_image",
-                                    ) as HTMLInputElement;
-                                    if (input) input.value = "";
-                                }}
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="16"
-                                    height="16"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    ><line x1="18" y1="6" x2="6" y2="18"
-                                    ></line><line x1="6" y1="6" x2="18" y2="18"
-                                    ></line></svg
-                                >
-                            </button>
-                        </div>
-                    {/if}
-                </div>
-
-                <div class="flex gap-3">
-                    <button
-                        type="button"
-                        on:click={() => {
-                            showReimburseModal = false;
-                            reimburseProofPreviewUrl = null;
-                        }}
-                        class="flex-1 py-2 border rounded-lg hover:bg-gray-50"
-                        >ยกเลิก</button
-                    >
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        class="flex-1 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 disabled:opacity-70 flex justify-center items-center gap-2"
-                    >
-                        {#if loading}
-                            <Loader2 class="animate-spin" size={16} /> กำลังบันทึก...
-                        {:else}
-                            ยืนยัน
-                        {/if}
-                    </button>
-                </div>
-            </form>
+                <X size={18} />
+            </button>
         </div>
+
+        <form
+            action={`/expenses/${data.expense.id}?/reimburse`}
+            method="POST"
+            enctype="multipart/form-data"
+            use:enhance={() => {
+                loading = true;
+                return async ({ update }) => {
+                    loading = false;
+                    showReimburseSheet = false;
+                    update();
+                };
+            }}
+            class="space-y-4"
+        >
+            <input type="hidden" name="reimbursed_by" value={data.currentProfileId || ""} />
+
+            <div>
+                <div class="field-label">คนที่ยืนยันการคืนเงิน</div>
+                <div class="identity-chip">
+                    {#if data.currentUser?.avatar_url}
+                        <img
+                            src={data.currentUser.avatar_url}
+                            alt=""
+                            class="h-8 w-8 rounded-full object-cover"
+                            referrerpolicy="no-referrer"
+                        />
+                    {/if}
+                    <div>
+                        <div class="font-semibold text-slate-800">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</div>
+                        <div class="text-xs text-slate-500">ยึดจากบัญชีผู้ใช้ปัจจุบัน</div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="field-label" for="proof_image">หลักฐานการโอนคืน (ไม่บังคับ)</label>
+                <input
+                    type="file"
+                    id="proof_image"
+                    name="proof_image"
+                    accept="image/png, image/jpeg, image/webp, image/heic"
+                    class="field-input"
+                    on:change={handleReimburseFileChange}
+                />
+            </div>
+
+            {#if reimburseProofPreviewUrl}
+                <div class="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-100">
+                    <img src={reimburseProofPreviewUrl} alt="Reimbursement preview" class="max-h-72 w-full object-cover" />
+                </div>
+            {/if}
+
+            <button
+                type="submit"
+                disabled={loading}
+                class="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+            >
+                {#if loading}
+                    <Loader2 size={18} class="animate-spin" />
+                    กำลังบันทึก...
+                {:else}
+                    ยืนยันการเคลียร์ยอด
+                {/if}
+            </button>
+        </form>
     </div>
 {/if}

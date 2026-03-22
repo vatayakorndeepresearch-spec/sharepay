@@ -8,11 +8,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
     const { data: expense } = await supabase
         .from('expenses')
         .select(`
-      *,
-      projects (name),
-      profiles!expenses_paid_by_fkey (display_name),
-      reimburser:profiles!expenses_reimbursed_by_fkey (display_name)
-    `)
+            *,
+            projects (name),
+            profiles!expenses_paid_by_fkey (display_name),
+            reimburser:profiles!expenses_reimbursed_by_fkey (display_name)
+        `)
         .eq('id', id)
         .single();
 
@@ -20,20 +20,21 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
         throw error(404, 'ไม่พบรายการนี้');
     }
 
-    // Load profiles for reimbursement selection
-    const { data: profiles } = await supabase.from('profiles').select('*');
-
-    // Load attachments
     const { data: attachments } = await supabase
         .from('expense_attachments')
         .select('*')
         .eq('expense_id', id);
 
+    const actionState = {
+        canReimburse: !expense.is_reimbursed && expense.transaction_type === 'expense',
+        statusLabel: expense.is_reimbursed ? 'เคลียร์แล้ว' : expense.transaction_type === 'income' ? 'รับเงินแล้ว' : 'ยังไม่เคลียร์'
+    };
+
     return {
         expense: { ...expense, attachments: attachments || [] },
-        profiles: profiles || [],
         currentProfileId,
-        currentUser
+        currentUser,
+        actionState
     };
 };
 
@@ -46,7 +47,6 @@ export const actions: Actions = {
 
         let reimbursementProofUrl = null;
 
-        // Handle File Upload
         if (file && file.size > 0) {
             if (file.size > 5 * 1024 * 1024) {
                 return fail(400, { error: 'รูปภาพต้องมีขนาดไม่เกิน 5MB' });
@@ -67,7 +67,7 @@ export const actions: Actions = {
 
             if (uploadError) {
                 console.error('Upload error:', uploadError);
-                return fail(500, { error: 'อัพโหลดรูปไม่สำเร็จ' });
+                return fail(500, { error: 'อัปโหลดรูปไม่สำเร็จ' });
             }
 
             const { data: { publicUrl } } = supabase.storage
