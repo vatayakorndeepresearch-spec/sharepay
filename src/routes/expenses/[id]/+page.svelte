@@ -315,25 +315,18 @@
                 }}
             >
                 <div class="mb-4">
-                    <label
-                        for="reimbursed_by"
+                    <div
                         class="block text-sm font-medium text-gray-700 mb-1"
-                        >ใครเป็นคนคืนเงิน?</label
                     >
-                    <select
-                        name="reimbursed_by"
-                        id="reimbursed_by"
-                        class="w-full border-gray-300 rounded-lg"
-                    >
-                        <option value="">ไม่ระบุ</option>
-                        {#each profiles as profile}
-                            {#if profile.id !== expense.paid_by}
-                                <option value={profile.id}
-                                    >{profile.display_name}</option
-                                >
-                            {/if}
-                        {/each}
-                    </select>
+                        ใครเป็นคนคืนเงิน?
+                    </div>
+                    <input type="hidden" name="reimbursed_by" value={data.currentProfileId || ''} />
+                    <div class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 flex items-center gap-3">
+                        {#if data.currentUser?.avatar_url}
+                            <img src={data.currentUser.avatar_url} alt="" class="w-7 h-7 rounded-full object-cover" referrerpolicy="no-referrer" />
+                        {/if}
+                        <span class="text-sm text-gray-700 font-medium">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</span>
+                    </div>
                 </div>
 
                 <div class="mb-6">

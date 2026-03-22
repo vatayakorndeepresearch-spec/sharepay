@@ -1,19 +1,21 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const { data: projects } = await supabase.from('projects').select('*').eq('is_active', true).order('name');
     const { data: profiles } = await supabase.from('profiles').select('*').order('display_name');
+    const { currentProfileId, currentUser } = await parent();
 
     return {
         projects: projects || [],
-        profiles: profiles || []
+        profiles: profiles || [],
+        currentProfileId,
+        currentUser
     };
 };
 
 export const actions: Actions = {
     save: async ({ request, locals: { supabase } }) => {
-        console.log('Starting save action...');
         const formData = await request.formData();
 
         const projectId = formData.get('project_id') as string;
@@ -25,6 +27,10 @@ export const actions: Actions = {
         const category = (formData.get('category') as string) || 'Others';
         const notes = formData.get('notes') as string; // Added notes
         const isReimbursed = formData.get('is_reimbursed') === 'on';
+        if (!projectId || !paidBy || isNaN(amount) || amount <= 0 || !paidAt || !description) {
+            return fail(400, { error: 'กรุณากรอกข้อมูลให้ครบถ้วน และจำนวนเงินต้องมากกว่า 0' });
+        }
+
         const files = formData.getAll('proof_images') as File[];
         let uploadedUrls: string[] = [];
 
@@ -36,7 +42,13 @@ export const actions: Actions = {
                         return fail(400, { error: 'รูปภาพต้องมีขนาดไม่เกิน 5MB' });
                     }
 
-                    const fileExt = file.name.split('.').pop();
+                    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
+                    const allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'];
+                    const fileExt = file.name.split('.').pop()?.toLowerCase();
+                    if (!fileExt || !allowedExts.includes(fileExt) || !allowedTypes.includes(file.type)) {
+                        return fail(400, { error: 'อนุญาตเฉพาะไฟล์รูปภาพ (JPG, PNG, GIF, WebP, HEIC)' });
+                    }
+
                     const fileName = `uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
                     const { error: uploadError } = await supabase.storage
@@ -78,7 +90,7 @@ export const actions: Actions = {
 
         if (insertError) {
             console.error('Insert Error:', insertError);
-            return fail(500, { error: insertError.message });
+            return fail(500, { error: 'เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่อีกครั้ง' });
         }
 
         // Insert Attachments
@@ -98,8 +110,6 @@ export const actions: Actions = {
                 // We don't fail the whole request if attachments fail, but we log it.
             }
         }
-
-        console.log('Insert successful!');
 
         throw redirect(303, '/expenses');
     }

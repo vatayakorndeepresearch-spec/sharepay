@@ -410,27 +410,20 @@
             />
         </div>
 
-        <!-- Person -->
+        <!-- Person (auto-set from logged-in user) -->
+        <input type="hidden" name="paid_by" value={data.currentProfileId || ''} />
         <div>
-            <label
-                for="paid_by"
+            <div
                 class="block text-sm font-medium text-gray-700 mb-1"
             >
                 {transactionType === "expense" ? "ผู้สำรองจ่าย" : "ผู้รับเงิน"}
-            </label>
-            <select
-                name="paid_by"
-                id="paid_by"
-                required
-                class="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                value={data.expense.paid_by}
-            >
-                {#each data.profiles as profile}
-                    <option value={profile.id}>
-                        {profile.display_name}
-                    </option>
-                {/each}
-            </select>
+            </div>
+            <div class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 flex items-center gap-3">
+                {#if data.currentUser?.avatar_url}
+                    <img src={data.currentUser.avatar_url} alt="" class="w-7 h-7 rounded-full object-cover" referrerpolicy="no-referrer" />
+                {/if}
+                <span class="text-sm text-gray-700 font-medium">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</span>
+            </div>
         </div>
 
         <!-- Amount -->

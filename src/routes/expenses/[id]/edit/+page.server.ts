@@ -1,8 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase }, parent }) => {
     const { id } = params;
+    const { currentProfileId, currentUser } = await parent();
 
     const { data: expense } = await supabase
         .from('expenses')
@@ -26,7 +27,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
     return {
         expense: { ...expense, attachments: attachments || [] },
         projects: projects || [],
-        profiles: profiles || []
+        profiles: profiles || [],
+        currentProfileId,
+        currentUser
     };
 };
 
@@ -46,8 +49,8 @@ export const actions: Actions = {
         const files = formData.getAll('proof_images') as File[];
         let uploadedUrls: string[] = [];
 
-        if (!projectId || !paidBy || isNaN(amount) || !paidAt || !description) {
-            return fail(400, { error: 'กรุณากรอกข้อมูลให้ครบถ้วน' });
+        if (!projectId || !paidBy || isNaN(amount) || amount <= 0 || !paidAt || !description) {
+            return fail(400, { error: 'กรุณากรอกข้อมูลให้ครบถ้วน และจำนวนเงินต้องมากกว่า 0' });
         }
 
         const updates: any = {
@@ -69,7 +72,13 @@ export const actions: Actions = {
                         return fail(400, { error: 'รูปภาพต้องมีขนาดไม่เกิน 5MB' });
                     }
 
-                    const fileExt = file.name.split('.').pop();
+                    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
+                    const allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'];
+                    const fileExt = file.name.split('.').pop()?.toLowerCase();
+                    if (!fileExt || !allowedExts.includes(fileExt) || !allowedTypes.includes(file.type)) {
+                        return fail(400, { error: 'อนุญาตเฉพาะไฟล์รูปภาพ (JPG, PNG, GIF, WebP, HEIC)' });
+                    }
+
                     const fileName = `uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
                     const { error: uploadError } = await supabase.storage
@@ -116,7 +125,8 @@ export const actions: Actions = {
             .eq('id', id);
 
         if (updateError) {
-            return fail(500, { error: updateError.message });
+            console.error('Update error:', updateError);
+            return fail(500, { error: 'เกิดข้อผิดพลาดในการแก้ไข กรุณาลองใหม่อีกครั้ง' });
         }
 
         // Insert Attachments
@@ -154,7 +164,8 @@ export const actions: Actions = {
             .eq('id', attachmentId);
 
         if (error) {
-            return fail(500, { error: error.message });
+            console.error('Delete attachment error:', error);
+            return fail(500, { error: 'เกิดข้อผิดพลาดในการลบไฟล์ กรุณาลองใหม่อีกครั้ง' });
         }
 
         // Check if we need to update proof_image_url

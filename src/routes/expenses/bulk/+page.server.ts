@@ -1,13 +1,16 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const { data: projects } = await supabase.from('projects').select('*').eq('is_active', true).order('name');
     const { data: profiles } = await supabase.from('profiles').select('*').order('display_name');
+    const { currentProfileId, currentUser } = await parent();
 
     return {
         projects: projects || [],
-        profiles: profiles || []
+        profiles: profiles || [],
+        currentProfileId,
+        currentUser
     };
 };
 
@@ -15,19 +18,6 @@ export const actions: Actions = {
     batchSave: async ({ request, locals: { supabase } }) => {
         const formData = await request.formData();
         const itemCount = parseInt(formData.get('item_count') as string || '0');
-
-        console.log('=== Bulk Save Debug ===');
-        console.log('Item count:', itemCount);
-
-        // Log all form data keys
-        for (const [key, value] of formData.entries()) {
-            if (key.includes('file')) {
-                console.log(`${key}: [File object]`);
-            } else {
-                console.log(`${key}:`, value);
-            }
-        }
-        console.log('=== End Debug ===');
 
         const errors = [];
         const successIds = [];
@@ -42,12 +32,18 @@ export const actions: Actions = {
                 const description = formData.get(`item_${i}_description`) as string;
                 const category = (formData.get(`item_${i}_category`) as string) || 'Others';
                 const notes = formData.get(`item_${i}_notes`) as string || '';
+                const isReimbursed = (formData.get(`item_${i}_is_reimbursed`) as string) === 'true';
                 const file = formData.get(`item_${i}_file`) as File;
 
-                console.log(`Processing item ${i}:`, {
-                    projectId, transactionType, paidBy, amount, paidAt, description, category,
-                    file: file ? { name: file.name, size: file.size, type: file.type } : 'NO FILE RECEIVED'
-                });
+                if (isNaN(amount) || amount <= 0) {
+                    errors.push(`รายการที่ ${i + 1}: จำนวนเงินต้องมากกว่า 0`);
+                    continue;
+                }
+
+                if (!projectId) {
+                    errors.push(`รายการที่ ${i + 1}: กรุณาเลือกโปรเจค`);
+                    continue;
+                }
 
                 let uploadedUrl: string | null = null;
 
@@ -58,7 +54,14 @@ export const actions: Actions = {
                         continue;
                     }
 
-                    const fileExt = file.name.split('.').pop();
+                    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
+                    const allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'];
+                    const fileExt = file.name.split('.').pop()?.toLowerCase();
+                    if (!fileExt || !allowedExts.includes(fileExt) || !allowedTypes.includes(file.type)) {
+                        errors.push(`รายการที่ ${i + 1}: อนุญาตเฉพาะไฟล์รูปภาพ (JPG, PNG, GIF, WebP, HEIC)`);
+                        continue;
+                    }
+
                     const fileName = `uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
                     const { error: uploadError } = await supabase.storage
@@ -78,16 +81,6 @@ export const actions: Actions = {
                     uploadedUrl = publicUrl;
                 }
 
-                if (isNaN(amount) || amount <= 0) {
-                    errors.push(`รายการที่ ${i + 1}: จำนวนเงินไม่ถูกต้อง`);
-                    continue;
-                }
-
-                if (!projectId) {
-                    errors.push(`รายการที่ ${i + 1}: กรุณาเลือกโปรเจค`);
-                    continue;
-                }
-
                 // Insert Expense
                 const { data: expense, error: insertError } = await supabase.from('expenses').insert({
                     project_id: projectId,
@@ -98,13 +91,13 @@ export const actions: Actions = {
                     description: description || 'บันทึกแบบกลุ่ม',
                     category: category || 'อื่นๆ',
                     notes,
-                    is_reimbursed: transactionType === 'income' ? true : false,
+                    is_reimbursed: transactionType === 'income' ? true : isReimbursed,
                     proof_image_url: uploadedUrl
                 }).select().single();
 
                 if (insertError) {
                     console.error(`Insert Error for item ${i}:`, insertError);
-                    errors.push(`รายการที่ ${i + 1}: บันทึกข้อมูลไม่สำเร็จ (${insertError.message})`);
+                    errors.push(`รายการที่ ${i + 1}: บันทึกข้อมูลไม่สำเร็จ`);
                     continue;
                 }
 

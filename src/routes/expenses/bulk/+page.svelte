@@ -14,6 +14,7 @@
         Save,
         ChevronLeft,
         Sparkles,
+        CheckCircle2,
     } from "lucide-svelte";
     import { getOCRWorker } from "$lib/stores/ocrStore";
     import { onMount } from "svelte";
@@ -203,8 +204,9 @@
                 date: new Date().toISOString().split("T")[0],
                 category: "",
                 projectId: defaultProjectId,
-                paidBy: data.profiles[0]?.id || "",
+                paidBy: data.currentProfileId || data.profiles[0]?.id || "",
                 transactionType: "expense",
+                isReimbursed: false,
             };
 
             items = [...items, newItem];
@@ -465,21 +467,17 @@
                             </div>
 
                             <div>
-                                <label
+                                <div
                                     class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1"
-                                    >ผู้จ่าย</label
+                                    >ผู้จ่าย</div
                                 >
-                                <select
-                                    name={`item_${i}_paid_by`}
-                                    bind:value={item.paidBy}
-                                    class="w-full bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20 py-3 px-4 text-sm font-bold"
-                                >
-                                    {#each data.profiles as profile}
-                                        <option value={profile.id}
-                                            >{profile.display_name}</option
-                                        >
-                                    {/each}
-                                </select>
+                                <input type="hidden" name={`item_${i}_paid_by`} value={item.paidBy || ''} />
+                                <div class="w-full bg-slate-50 rounded-2xl py-3 px-4 flex items-center gap-3">
+                                    {#if data.currentUser?.avatar_url}
+                                        <img src={data.currentUser.avatar_url} alt="" class="w-7 h-7 rounded-full object-cover" referrerpolicy="no-referrer" />
+                                    {/if}
+                                    <span class="text-sm font-bold text-slate-700">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</span>
+                                </div>
                             </div>
 
                             <div class="md:col-span-full">
@@ -499,6 +497,33 @@
                                     name={`item_${i}_notes`}
                                     value={item.notes}
                                 />
+                            </div>
+
+                            <div class="md:col-span-full">
+                                <input
+                                    type="hidden"
+                                    name={`item_${i}_is_reimbursed`}
+                                    value={item.isReimbursed ? 'true' : 'false'}
+                                />
+                                <button
+                                    type="button"
+                                    on:click={() => {
+                                        items[i].isReimbursed = !items[i].isReimbursed;
+                                    }}
+                                    class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all w-full {item.isReimbursed
+                                        ? 'bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200'
+                                        : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}"
+                                >
+                                    <CheckCircle2
+                                        size={20}
+                                        class={item.isReimbursed
+                                            ? 'text-emerald-500'
+                                            : 'text-slate-300'}
+                                    />
+                                    <span class="text-sm font-bold">
+                                        {item.isReimbursed ? 'เคลียร์แล้ว' : 'ยังไม่เคลียร์'}
+                                    </span>
+                                </button>
                             </div>
                         </div>
                     </div>

@@ -1,8 +1,9 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase }, parent }) => {
     const { id } = params;
+    const { currentProfileId, currentUser } = await parent();
 
     const { data: expense } = await supabase
         .from('expenses')
@@ -30,7 +31,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
     return {
         expense: { ...expense, attachments: attachments || [] },
-        profiles: profiles || []
+        profiles: profiles || [],
+        currentProfileId,
+        currentUser
     };
 };
 
@@ -49,7 +52,13 @@ export const actions: Actions = {
                 return fail(400, { error: 'รูปภาพต้องมีขนาดไม่เกิน 5MB' });
             }
 
-            const fileExt = file.name.split('.').pop();
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
+            const allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'];
+            const fileExt = file.name.split('.').pop()?.toLowerCase();
+            if (!fileExt || !allowedExts.includes(fileExt) || !allowedTypes.includes(file.type)) {
+                return fail(400, { error: 'อนุญาตเฉพาะไฟล์รูปภาพ (JPG, PNG, GIF, WebP, HEIC)' });
+            }
+
             const fileName = `reimbursements/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
             const { error: uploadError } = await supabase.storage
@@ -79,7 +88,8 @@ export const actions: Actions = {
             .eq('id', id);
 
         if (updateError) {
-            return fail(500, { error: updateError.message });
+            console.error('Reimburse error:', updateError);
+            return fail(500, { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
         }
 
         return { success: true };
@@ -99,7 +109,8 @@ export const actions: Actions = {
             .eq('id', id);
 
         if (updateError) {
-            return fail(500, { error: updateError.message });
+            console.error('Unreimburse error:', updateError);
+            return fail(500, { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
         }
 
         return { success: true };
@@ -114,7 +125,8 @@ export const actions: Actions = {
             .eq('id', id);
 
         if (deleteError) {
-            return fail(500, { error: deleteError.message });
+            console.error('Delete error:', deleteError);
+            return fail(500, { error: 'เกิดข้อผิดพลาดในการลบ กรุณาลองใหม่อีกครั้ง' });
         }
 
         throw redirect(303, '/expenses');

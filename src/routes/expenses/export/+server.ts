@@ -1,7 +1,6 @@
-import { supabase } from '$lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-export async function GET({ url }) {
+export async function GET({ url, locals: { supabase } }) {
     const projectId = url.searchParams.get('project');
     const status = url.searchParams.get('status');
     const type = url.searchParams.get('type');
@@ -34,7 +33,8 @@ export async function GET({ url }) {
     const { data: expenses, error } = await query;
 
     if (error) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+        console.error('Export error:', error);
+        return new Response(JSON.stringify({ error: 'เกิดข้อผิดพลาดในการส่งออกข้อมูล' }), { status: 500 });
     }
 
     const data = expenses.map(e => ({
