@@ -262,7 +262,7 @@
             {#if data.actionState.canReimburse}
                 <button
                     type="button"
-                    class="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"
+                    class="btn-success"
                     on:click={() => (showReimburseSheet = true)}
                 >
                     <CheckCircle2 size={18} />
@@ -274,7 +274,7 @@
                         รายการนี้เคลียร์เรียบร้อยแล้ว
                     </div>
                     <form action={`/expenses/${data.expense.id}?/unreimburse`} method="POST" use:enhance>
-                        <button type="submit" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600">
+                        <button type="submit" class="btn-secondary w-full">
                             ย้อนกลับเป็นยังไม่เคลียร์
                         </button>
                     </form>

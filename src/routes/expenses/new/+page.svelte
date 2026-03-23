@@ -360,13 +360,13 @@
 
         <div class="sticky-action-bar">
             <div class="mx-auto flex max-w-md gap-3">
-                <a href="/expenses" class="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-600">
+                <a href="/expenses" class="btn-secondary">
                     ยกเลิก
                 </a>
                 <button
                     type="submit"
                     disabled={loading || scanning}
-                    class="flex flex-[1.3] items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    class="btn-primary"
                 >
                     {#if loading}
                         <Loader2 size={18} class="animate-spin" />

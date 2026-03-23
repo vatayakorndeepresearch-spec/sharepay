@@ -83,9 +83,36 @@
   }
 
   .sticky-action-bar {
-    @apply fixed left-0 right-0 z-40 border-t border-slate-200 bg-white/90 px-4 pt-3 shadow-[0_-16px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl;
+    @apply fixed left-0 right-0 z-40 bg-white/80 px-5 pt-4 backdrop-blur-2xl;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
-    padding-bottom: 16px;
+    padding-bottom: 20px;
+  }
+
+  .sticky-action-bar::before {
+    content: "";
+    @apply pointer-events-none absolute inset-x-0 -top-8 h-8;
+    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.8));
+  }
+
+  .sticky-action-bar .btn-primary {
+    @apply relative flex flex-[1.4] items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-bold text-white transition-all duration-200 active:scale-[0.97];
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    box-shadow: 0 8px 24px -4px rgba(99, 74, 226, 0.45), 0 2px 8px -2px rgba(99, 74, 226, 0.3);
+  }
+
+  .sticky-action-bar .btn-primary:disabled {
+    @apply opacity-50;
+    box-shadow: none;
+  }
+
+  .sticky-action-bar .btn-secondary {
+    @apply flex flex-1 items-center justify-center rounded-full bg-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-500 transition-all duration-200 active:scale-[0.97] active:bg-slate-200;
+  }
+
+  .sticky-action-bar .btn-success {
+    @apply relative flex w-full items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-bold text-white transition-all duration-200 active:scale-[0.97];
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    box-shadow: 0 8px 24px -4px rgba(16, 185, 129, 0.45), 0 2px 8px -2px rgba(16, 185, 129, 0.3);
   }
 
   .sheet-panel {
