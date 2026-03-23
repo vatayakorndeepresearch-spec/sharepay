@@ -50,11 +50,11 @@
         updateQuery({ status: "all", type: mode });
     }
 
-    function getQuickMode() {
-        if (data.filters.status === "unpaid" && data.filters.type === "expense") return "unpaid";
-        if (data.filters.status === "paid" && data.filters.type === "expense") return "paid";
-        if (data.filters.type === "income") return "income";
-        if (data.filters.type === "expense" && data.filters.status === "all") return "expense";
+    function getQuickMode(filters: typeof data.filters) {
+        if (filters.status === "unpaid" && filters.type === "expense") return "unpaid";
+        if (filters.status === "paid" && filters.type === "expense") return "paid";
+        if (filters.type === "income") return "income";
+        if (filters.type === "expense" && filters.status === "all") return "expense";
         return "all";
     }
 
@@ -78,7 +78,7 @@
         }));
     }
 
-    $: activeQuickMode = getQuickMode();
+    $: activeQuickMode = getQuickMode(data.filters);
     $: dateGroups = groupedExpenses(data.expenses);
     $: selectedProjectName =
         data.filters.project === "all"

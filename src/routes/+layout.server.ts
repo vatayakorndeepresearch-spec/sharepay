@@ -4,11 +4,11 @@ export const load: LayoutServerLoad = async ({ locals: { supabase, user } }) => 
     let currentProfileId: string | null = null;
     let currentUser: { name: string; email: string; avatar_url: string } | null = null;
 
-    if (user?.email) {
+    if (user) {
         const { data: profile } = await supabase
             .from('profiles')
             .select('id')
-            .eq('email', user.email)
+            .eq('id', user.id)
             .single();
 
         currentProfileId = profile?.id ?? null;

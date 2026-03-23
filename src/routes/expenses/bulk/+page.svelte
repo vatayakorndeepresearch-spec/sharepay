@@ -286,13 +286,19 @@
                         </div>
                     </div>
 
+                    <input type="hidden" name={`item_${index}_transaction_type`} value={item.transactionType} />
+                    <input type="hidden" name={`item_${index}_paid_by`} value={item.paidBy || ""} />
+                    <input type="hidden" name={`item_${index}_notes`} value={item.notes} />
+                    <input type="hidden" name={`item_${index}_is_reimbursed`} value={item.isReimbursed ? "true" : "false"} />
+                    <input type="hidden" name={`item_${index}_amount`} value={item.amount || ""} />
+                    <input type="hidden" name={`item_${index}_date`} value={item.date} />
+                    <input type="hidden" name={`item_${index}_description`} value={item.description} />
+                    <input type="hidden" name={`item_${index}_category`} value={item.category} />
+                    <input type="hidden" name={`item_${index}_project_id`} value={item.projectId} />
+
                     {#if item.expanded}
                         <div class="border-t border-slate-200 bg-slate-50/70 p-4">
                             <div class="grid gap-4 md:grid-cols-2">
-                                <input type="hidden" name={`item_${index}_transaction_type`} value={item.transactionType} />
-                                <input type="hidden" name={`item_${index}_paid_by`} value={item.paidBy || ""} />
-                                <input type="hidden" name={`item_${index}_notes`} value={item.notes} />
-                                <input type="hidden" name={`item_${index}_is_reimbursed`} value={item.isReimbursed ? "true" : "false"} />
 
                                 <div>
                                     <div class="field-label">จำนวนเงิน</div>

@@ -57,6 +57,7 @@ export const actions: Actions = {
             return fail(400, { error: 'กรุณากรอกข้อมูลให้ครบถ้วน และจำนวนเงินต้องมากกว่า 0' });
         }
 
+        const isReimbursed = formData.get('is_reimbursed') === 'on';
         const updates: any = {
             project_id: projectId,
             transaction_type: transactionType,
@@ -65,7 +66,8 @@ export const actions: Actions = {
             paid_at: paidAt,
             description,
             category,
-            is_reimbursed: transactionType === 'income' ? true : undefined
+            notes,
+            is_reimbursed: transactionType === 'income' ? true : isReimbursed
         };
 
         // Handle Multiple File Uploads
