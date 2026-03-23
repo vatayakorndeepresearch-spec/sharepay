@@ -30,12 +30,6 @@
             สถานะตอนนี้
         </div>
 
-        <h2 class="text-xl font-bold font-display">
-            {settlementSummary.headline}
-        </h2>
-        <p class="mt-1 text-sm text-indigo-200">
-            {settlementSummary.subline}
-        </p>
 
         {#if settlementSummary.amount > 0}
             <div class="mt-4 rounded-xl bg-white/10 px-4 py-3">

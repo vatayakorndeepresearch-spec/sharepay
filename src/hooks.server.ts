@@ -21,14 +21,14 @@ export const handle: Handle = async ({ event, resolve }) => {
     });
 
     const {
-        data: { session },
-    } = await event.locals.supabase.auth.getSession();
+        data: { user },
+    } = await event.locals.supabase.auth.getUser();
 
-    event.locals.session = session;
-    event.locals.user = session?.user || null;
+    event.locals.user = user ?? null;
+    event.locals.session = user ? { user } as any : null;
 
     // Protect routes
-    if (!session && !event.url.pathname.startsWith('/login') && !event.url.pathname.startsWith('/auth')) {
+    if (!user && !event.url.pathname.startsWith('/login') && !event.url.pathname.startsWith('/auth')) {
         return new Response(null, {
             status: 303,
             headers: { location: '/login' },
@@ -36,7 +36,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
 
     // If logged in, don't allow access to login page
-    if (session && event.url.pathname.startsWith('/login')) {
+    if (user && event.url.pathname.startsWith('/login')) {
         return new Response(null, {
             status: 303,
             headers: { location: '/' },

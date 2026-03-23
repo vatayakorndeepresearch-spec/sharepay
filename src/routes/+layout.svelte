@@ -28,7 +28,11 @@
 
 <div class="app-shell pb-20">
   <main class="max-w-md mx-auto px-4 pt-4 pb-8">
-    <slot />
+    {#key $page.url.pathname}
+      <div class="page-transition" in:fade={{ duration: 150, delay: 80 }} out:fade={{ duration: 80 }}>
+        <slot />
+      </div>
+    {/key}
   </main>
 
   {#if showEntrySheet}

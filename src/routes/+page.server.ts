@@ -5,34 +5,36 @@ type SettlementState = 'you_owe' | 'owed_to_you' | 'clear' | 'unknown';
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const { currentProfileId, currentUser } = await parent();
 
-    const { data: expenses } = await supabase
-        .from('expenses')
-        .select(`
-            *,
-            projects (name),
-            profiles!expenses_paid_by_fkey (display_name)
-        `)
-        .order('paid_at', { ascending: false })
-        .limit(8);
-
-    const { data: allExpenses } = await supabase
-        .from('expenses')
-        .select(`
-            amount,
-            transaction_type,
-            paid_by,
-            is_reimbursed,
-            projects (id, name)
-        `);
-
-    const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, display_name')
-        .order('created_at', { ascending: true })
-        .limit(2);
+    const [{ data: expenses }, { data: allExpenses }, { data: profiles }] = await Promise.all([
+        supabase
+            .from('expenses')
+            .select(`
+                *,
+                projects (name),
+                profiles!expenses_paid_by_fkey (display_name)
+            `)
+            .order('paid_at', { ascending: false })
+            .limit(8),
+        supabase
+            .from('expenses')
+            .select(`
+                amount,
+                transaction_type,
+                paid_by,
+                is_reimbursed,
+                projects (id, name)
+            `)
+            .limit(5000),
+        supabase
+            .from('profiles')
+            .select('id, display_name')
+            .order('created_at', { ascending: true })
+            .limit(2)
+    ]);
 
     const projectSummary: Record<string, { name: string; income: number; expense: number }> = {};
     const payerMap: Record<string, number> = {};
+    let unpaidCount = 0;
 
     allExpenses?.forEach((item) => {
         const project = item.projects as { id?: string; name?: string } | null;
@@ -54,6 +56,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
 
         if (item.transaction_type === 'expense' && !item.is_reimbursed) {
             payerMap[item.paid_by] = (payerMap[item.paid_by] || 0) + Number(item.amount);
+            unpaidCount++;
         }
     });
 
@@ -81,15 +84,11 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
         }
     }
 
-    const unpaidExpenses = (allExpenses || []).filter(
-        (item) => item.transaction_type === 'expense' && !item.is_reimbursed
-    );
-
     const settlementSummary = {
         state: settlementState,
         amount: settlementAmount,
         otherPartyName,
-        unpaidCount: unpaidExpenses.length,
+        unpaidCount,
         headline:
             settlementState === 'you_owe'
                 ? `คุณต้องโอน ${otherPartyName || 'อีกฝ่าย'}`
