@@ -88,34 +88,23 @@
             processOCR(files[0]);
         }
 
-        files.forEach((file) => {
-            const reader = new FileReader();
-            reader.onload = (loadEvent) => {
-                if (loadEvent.target?.result) {
-                    previewUrls = [...previewUrls, loadEvent.target.result as string];
-                }
-            };
-            reader.readAsDataURL(file);
-        });
+        previewUrls = files.map((file) => URL.createObjectURL(file));
     }
 </script>
 
-<div class="page-shell pb-40">
-    <div class="flex items-center gap-3 px-1">
+<div class="page-shell pb-36">
+    <div class="flex items-center gap-2.5 px-1">
         <a
             href="/expenses"
-            class="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500"
+            class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500"
         >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={18} />
         </a>
-        <div>
-            <p class="eyebrow">Entry</p>
-            <h1 class="text-2xl font-black text-slate-900 font-display">เพิ่มรายการใหม่</h1>
-        </div>
+        <h1 class="text-xl font-bold text-slate-900 font-display">เพิ่มรายการใหม่</h1>
     </div>
 
     {#if form?.error}
-        <div class="surface-card border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-700" in:slide>
+        <div class="surface-card border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700" in:slide>
             {form.error}
         </div>
     {/if}
@@ -131,46 +120,41 @@
                 update();
             };
         }}
-        class="space-y-5"
+        class="space-y-4"
     >
-        <section class="surface-card p-2">
-            <div class="grid grid-cols-2 gap-2">
+        <section class="surface-card p-1.5">
+            <div class="grid grid-cols-2 gap-1.5">
                 <label class="cursor-pointer">
                     <input type="radio" class="sr-only" name="transaction_type" value="expense" bind:group={transactionType} />
-                    <div class={`flex items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-bold transition ${
-                        transactionType === "expense" ? "bg-slate-900 text-white" : "bg-white text-slate-500"
+                    <div class={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                        transactionType === "expense" ? "bg-slate-900 text-white" : "bg-white text-slate-400"
                     }`}>
-                        <ArrowUpRight size={18} />
+                        <ArrowUpRight size={16} />
                         รายจ่าย
                     </div>
                 </label>
                 <label class="cursor-pointer">
                     <input type="radio" class="sr-only" name="transaction_type" value="income" bind:group={transactionType} />
-                    <div class={`flex items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-bold transition ${
-                        transactionType === "income" ? "bg-emerald-600 text-white" : "bg-white text-slate-500"
+                    <div class={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                        transactionType === "income" ? "bg-emerald-600 text-white" : "bg-white text-slate-400"
                     }`}>
-                        <ArrowDownLeft size={18} />
+                        <ArrowDownLeft size={16} />
                         รายรับ
                     </div>
                 </label>
             </div>
         </section>
 
-        <section class="surface-card p-5">
-            <div class="mb-3 flex items-center justify-between">
-                <div>
-                    <h2 class="text-lg font-black text-slate-900 font-display">จำนวนเงิน</h2>
-                    <p class="text-sm text-slate-500">เริ่มจากตัวเลขก่อน แล้วค่อยเติมรายละเอียดอื่น</p>
-                </div>
+        <section class="surface-card p-4">
+            <div class="mb-2 flex items-center justify-between">
+                <label class="field-label mb-0" for="amount">จำนวนเงิน (บาท)</label>
                 {#if scanning}
-                    <div class="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700" in:fade>
-                        <Sparkles size={13} class="animate-pulse" />
-                        AI กำลังอ่านสลิป
+                    <div class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600" in:fade>
+                        <Sparkles size={12} class="animate-pulse" />
+                        กำลังอ่านสลิป
                     </div>
                 {/if}
             </div>
-
-            <label class="field-label" for="amount">จำนวนเงิน (บาท)</label>
             <div class="relative">
                 <input
                     id="amount"
@@ -180,18 +164,15 @@
                     step="0.01"
                     required
                     bind:value={amount}
-                    class={`field-input-hero pr-14 ${isHighlighted("amount") ? "border-indigo-300 bg-indigo-50 text-indigo-700" : ""}`}
+                    class={`field-input-hero pr-12 ${isHighlighted("amount") ? "border-indigo-300 bg-indigo-50 text-indigo-700" : ""}`}
                     placeholder="0.00"
                 />
-                <span class="absolute right-5 top-1/2 -translate-y-1/2 text-lg font-bold text-slate-300">฿</span>
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-300">฿</span>
             </div>
         </section>
 
-        <section class="surface-card p-5">
-            <div class="mb-4">
-                <h2 class="text-lg font-black text-slate-900 font-display">หลักฐาน / สลิป</h2>
-                <p class="text-sm text-slate-500">แนบรูปถ้ามี ระบบจะพยายามช่วยเติมจำนวนเงิน วันที่ และ memo ให้</p>
-            </div>
+        <section class="surface-card p-4">
+            <label class="field-label" for="proof_images">หลักฐาน / สลิป</label>
 
             <input
                 type="file"
@@ -205,39 +186,34 @@
 
             <label
                 for="proof_images"
-                class="flex cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center transition hover:border-indigo-300 hover:bg-indigo-50"
+                class="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 transition hover:border-indigo-300 hover:bg-indigo-50"
             >
-                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-indigo-600">
                     {#if scanning}
-                        <ScanLine size={22} class="animate-spin" />
+                        <ScanLine size={20} class="animate-spin" />
                     {:else}
-                        <ImageIcon size={22} />
+                        <ImageIcon size={20} />
                     {/if}
                 </div>
                 <div>
-                    <div class="text-base font-bold text-slate-900">อัปโหลดรูปสลิป</div>
-                    <p class="mt-1 text-sm text-slate-500">ยังกรอกมือได้ครบถ้วนเสมอ แม้ OCR จะอ่านไม่สำเร็จ</p>
+                    <div class="text-sm font-semibold text-slate-700">อัปโหลดรูปสลิป</div>
+                    <p class="text-xs text-slate-500">ระบบจะช่วยเติมข้อมูลจากรูป</p>
                 </div>
             </label>
 
             {#if previewUrls.length > 0}
-                <div class="mt-4 grid grid-cols-3 gap-3" in:slide>
+                <div class="mt-3 grid grid-cols-3 gap-2" in:slide>
                     {#each previewUrls as url, index}
-                        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-                            <img src={url} alt={`Proof preview ${index + 1}`} class="h-24 w-full object-cover" />
+                        <div class="overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                            <img src={url} alt={`Proof preview ${index + 1}`} class="h-20 w-full object-cover" />
                         </div>
                     {/each}
                 </div>
             {/if}
         </section>
 
-        <section class="surface-card p-5">
-            <div class="mb-4">
-                <h2 class="text-lg font-black text-slate-900 font-display">รายละเอียดรายการ</h2>
-                <p class="text-sm text-slate-500">สิ่งสำคัญอยู่ด้านบนแล้ว ส่วนนี้ไว้เติม context ให้หาเจอง่ายในภายหลัง</p>
-            </div>
-
-            <div class="space-y-4">
+        <section class="surface-card p-4">
+            <div class="space-y-3">
                 <div>
                     <label class="field-label" for="description">รายละเอียด</label>
                     <input
@@ -304,7 +280,7 @@
                         <input
                             type="text"
                             bind:value={customCategory}
-                            class="field-input mt-3"
+                            class="field-input mt-2"
                             placeholder="หมวดหมู่ที่ต้องการใช้"
                         />
                     {/if}
@@ -317,8 +293,8 @@
                         id="notes"
                         name="notes"
                         bind:value={notes}
-                        class={`field-input min-h-[96px] ${isHighlighted("notes") ? "border-indigo-300 bg-indigo-50" : ""}`}
-                        placeholder="เช่น รายละเอียดจาก memo หรือ context เพิ่มเติม"
+                        class={`field-input min-h-[80px] ${isHighlighted("notes") ? "border-indigo-300 bg-indigo-50" : ""}`}
+                        placeholder="เช่น memo หรือ context เพิ่มเติม"
                     ></textarea>
                 </div>
 
@@ -330,28 +306,28 @@
                             <img
                                 src={data.currentUser.avatar_url}
                                 alt=""
-                                class="h-8 w-8 rounded-full object-cover"
+                                class="h-7 w-7 rounded-full object-cover"
                                 referrerpolicy="no-referrer"
                             />
                         {/if}
                         <div>
-                            <div class="font-semibold text-slate-800">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</div>
-                            <div class="text-xs text-slate-500">ล็อกตามบัญชีที่กำลังใช้งานอยู่</div>
+                            <div class="text-sm font-medium text-slate-800">{data.currentUser?.name || "ไม่พบโปรไฟล์"}</div>
+                            <div class="text-xs text-slate-500">บัญชีปัจจุบัน</div>
                         </div>
                     </div>
                 </div>
 
                 {#if transactionType === "expense"}
-                    <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                    <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
                         <input
                             type="checkbox"
                             name="is_reimbursed"
                             id="is_reimbursed"
-                            class="mt-1 h-5 w-5 rounded border-amber-300 text-indigo-600"
+                            class="mt-0.5 h-4 w-4 rounded border-amber-300 text-indigo-600"
                         />
                         <div>
-                            <div class="text-sm font-bold text-amber-900">รายการนี้เคลียร์แล้ว</div>
-                            <p class="mt-1 text-sm text-amber-700">ใช้เฉพาะกรณีที่มีการโอนคืนครบแล้วตั้งแต่ก่อนบันทึก</p>
+                            <div class="text-sm font-medium text-amber-900">เคลียร์แล้ว</div>
+                            <p class="text-xs text-amber-700">มีการโอนคืนครบแล้วก่อนบันทึก</p>
                         </div>
                     </label>
                 {/if}
@@ -359,7 +335,7 @@
         </section>
 
         <div class="sticky-action-bar">
-            <div class="mx-auto flex max-w-md gap-3">
+            <div class="mx-auto flex max-w-md gap-2">
                 <a href="/expenses" class="btn-secondary">
                     ยกเลิก
                 </a>
@@ -369,7 +345,7 @@
                     class="btn-primary"
                 >
                     {#if loading}
-                        <Loader2 size={18} class="animate-spin" />
+                        <Loader2 size={16} class="animate-spin" />
                         กำลังบันทึก...
                     {:else}
                         บันทึกรายการ

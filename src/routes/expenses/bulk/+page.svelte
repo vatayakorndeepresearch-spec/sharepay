@@ -53,11 +53,7 @@
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const previewUrl = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (event) => resolve(event.target?.result as string);
-                reader.readAsDataURL(file);
-            });
+            const previewUrl = URL.createObjectURL(file);
 
             const fileIndex = Date.now() + i;
             fileStore.set(fileIndex, file);
@@ -131,57 +127,49 @@
     $: reviewableItems = items;
 </script>
 
-<div class="page-shell pb-44">
-    <div class="flex items-center gap-3 px-1">
+<div class="page-shell pb-36">
+    <div class="flex items-center gap-2.5 px-1">
         <a
             href="/expenses"
-            class="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500"
+            class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500"
         >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={18} />
         </a>
-        <div>
-            <p class="eyebrow">Batch entry</p>
-            <h1 class="text-2xl font-black text-slate-900 font-display">สแกนหลายสลิป</h1>
-        </div>
+        <h1 class="text-xl font-bold text-slate-900 font-display">สแกนหลายสลิป</h1>
     </div>
 
     {#if form?.error}
-        <div class="surface-card border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-700">
+        <div class="surface-card border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
             {form.error}
         </div>
     {/if}
 
-    <section class="surface-card p-5">
-        <div class="mb-4">
-            <h2 class="text-lg font-black text-slate-900 font-display">อัปโหลดแล้ว review ทีละรายการ</h2>
-            <p class="text-sm text-slate-500">ระบบจะช่วยอ่านสลิปก่อน แล้วคุณค่อยขยาย card ที่ต้องแก้จริง ลดเวลาไล่กรอกทั้งหมด</p>
-        </div>
-
+    <section class="surface-card p-4">
         <label
-            class="flex cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center transition hover:border-indigo-300 hover:bg-indigo-50"
+            class="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 transition hover:border-indigo-300 hover:bg-indigo-50"
         >
-            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-indigo-600">
                 {#if isProcessing}
-                    <ScanLine size={22} class="animate-spin" />
+                    <ScanLine size={20} class="animate-spin" />
                 {:else}
-                    <Upload size={22} />
+                    <Upload size={20} />
                 {/if}
             </div>
             <div>
-                <div class="text-base font-bold text-slate-900">เลือกรูปหลายสลิป</div>
-                <p class="mt-1 text-sm text-slate-500">อัปโหลดได้หลายใบ แล้วค่อย approve หรือเอาออกทีละรายการ</p>
+                <div class="text-sm font-semibold text-slate-700">เลือกรูปหลายสลิป</div>
+                <p class="text-xs text-slate-500">อัปโหลดแล้ว review ก่อนบันทึก</p>
             </div>
             <input type="file" multiple accept="image/*" class="hidden" on:change={handleFileChange} />
         </label>
     </section>
 
     {#if reviewableItems.length === 0}
-        <section class="surface-card p-8 text-center">
-            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
-                <Upload size={26} />
+        <section class="surface-card p-6 text-center">
+            <div class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                <Upload size={22} />
             </div>
-            <h2 class="text-lg font-black text-slate-900 font-display">ยังไม่มีคิวรอตรวจ</h2>
-            <p class="mt-2 text-sm text-slate-500">เมื่ออัปโหลดสลิปแล้ว แต่ละใบจะมาอยู่ในคิว review ด้านล่างนี้</p>
+            <h2 class="text-base font-bold text-slate-900">ยังไม่มีคิวรอตรวจ</h2>
+            <p class="mt-1 text-sm text-slate-500">อัปโหลดสลิปแล้วจะมาอยู่ในคิวด้านล่าง</p>
         </section>
     {:else}
         <form
@@ -206,31 +194,31 @@
                     }
                 };
             }}
-            class="space-y-4"
+            class="space-y-3"
         >
             <input type="hidden" name="item_count" value={reviewableItems.length} />
 
             {#each reviewableItems as item, index}
                 <section class="surface-card overflow-hidden" in:scale>
-                    <div class="flex gap-4 p-4">
+                    <div class="flex gap-3 p-3">
                         <button
                             type="button"
-                            class="relative h-28 w-24 shrink-0 overflow-hidden rounded-[22px] border border-slate-200 bg-slate-100"
+                            class="relative h-24 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
                             on:click={() => (selectedPreview = item.previewUrl)}
                         >
                             <img src={item.previewUrl} alt="Slip preview" class="h-full w-full object-cover" />
                             {#if item.status === "scanning"}
-                                <div class="absolute inset-0 flex items-center justify-center bg-indigo-600/40 text-white backdrop-blur-sm">
-                                    <Loader2 size={22} class="animate-spin" />
+                                <div class="absolute inset-0 flex items-center justify-center bg-indigo-600/40 text-white">
+                                    <Loader2 size={18} class="animate-spin" />
                                 </div>
                             {/if}
                         </button>
 
                         <div class="min-w-0 flex-1">
-                            <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-start justify-between gap-2">
                                 <div>
                                     <div class="flex items-center gap-2">
-                                        <h2 class="text-base font-black text-slate-900 font-display">รายการ {index + 1}</h2>
+                                        <span class="text-sm font-semibold text-slate-900">#{index + 1}</span>
                                         <span
                                             class={`status-chip ${
                                                 item.status === "ready"
@@ -241,47 +229,46 @@
                                             }`}
                                         >
                                             {item.status === "ready"
-                                                ? "พร้อมตรวจ"
+                                                ? "พร้อม"
                                                 : item.status === "error"
-                                                  ? "อ่านไม่สมบูรณ์"
+                                                  ? "อ่านไม่ได้"
                                                   : "กำลังอ่าน"}
                                         </span>
                                     </div>
-                                    <div class="mt-2 text-2xl font-black text-slate-900 font-display">
+                                    <div class="mt-1 text-xl font-bold text-slate-900 font-display">
                                         {item.amount ? item.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                                     </div>
-                                    <p class="mt-1 truncate text-sm text-slate-500">
-                                        {item.description || "ยังไม่มีรายละเอียดจาก OCR"}
+                                    <p class="mt-0.5 truncate text-xs text-slate-500">
+                                        {item.description || "ยังไม่มีรายละเอียด"}
                                     </p>
                                 </div>
 
-                                <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-1.5">
                                     <button
                                         type="button"
-                                        class="rounded-2xl border border-slate-200 bg-white p-3 text-slate-500"
+                                        class="rounded-lg border border-slate-200 bg-white p-2 text-slate-400"
                                         aria-label="Toggle item details"
                                         on:click={() => toggleExpanded(item.fileIndex)}
                                     >
                                         <ChevronDown
-                                            size={16}
+                                            size={14}
                                             class={`transition-transform ${item.expanded ? "rotate-180" : ""}`}
                                         />
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-rose-600"
+                                        class="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-500"
                                         aria-label="Remove item"
                                         on:click={() => removeItem(item.fileIndex)}
                                     >
-                                        <Trash2 size={16} />
+                                        <Trash2 size={14} />
                                     </button>
                                 </div>
                             </div>
 
-                            <div class="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
-                                <span class="rounded-full bg-slate-100 px-3 py-1">{item.date}</span>
-                                <span class="rounded-full bg-slate-100 px-3 py-1">{item.category || "ยังไม่เลือกหมวด"}</span>
-                                <span class="rounded-full bg-slate-100 px-3 py-1">{data.currentUser?.name || "ผู้ใช้ปัจจุบัน"}</span>
+                            <div class="mt-2 flex flex-wrap gap-1.5 text-xs text-slate-500">
+                                <span class="rounded-md bg-slate-100 px-2 py-0.5">{item.date}</span>
+                                <span class="rounded-md bg-slate-100 px-2 py-0.5">{item.category || "ไม่มีหมวด"}</span>
                             </div>
                         </div>
                     </div>
@@ -297,9 +284,8 @@
                     <input type="hidden" name={`item_${index}_project_id`} value={item.projectId} />
 
                     {#if item.expanded}
-                        <div class="border-t border-slate-200 bg-slate-50/70 p-4">
-                            <div class="grid gap-4 md:grid-cols-2">
-
+                        <div class="border-t border-slate-100 bg-slate-50 p-3">
+                            <div class="grid gap-3 md:grid-cols-2">
                                 <div>
                                     <div class="field-label">จำนวนเงิน</div>
                                     <input
@@ -363,10 +349,10 @@
                                 <div class="md:col-span-2">
                                     <button
                                         type="button"
-                                        class={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold ${
+                                        class={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
                                             item.isReimbursed
                                                 ? "bg-emerald-50 text-emerald-700"
-                                                : "bg-white text-slate-600"
+                                                : "bg-white border border-slate-200 text-slate-600"
                                         }`}
                                         on:click={() => {
                                             items = items.map((entry) =>
@@ -376,8 +362,8 @@
                                             );
                                         }}
                                     >
-                                        <CheckCircle2 size={18} />
-                                        {item.isReimbursed ? "รายการนี้เคลียร์แล้ว" : "รายการนี้ยังไม่เคลียร์"}
+                                        <CheckCircle2 size={16} />
+                                        {item.isReimbursed ? "เคลียร์แล้ว" : "ยังไม่เคลียร์"}
                                     </button>
                                 </div>
                             </div>
@@ -387,7 +373,7 @@
             {/each}
 
             <div class="sticky-action-bar">
-                <div class="mx-auto flex max-w-md gap-3">
+                <div class="mx-auto flex max-w-md gap-2">
                     <button
                         type="button"
                         class="btn-secondary"
@@ -404,7 +390,7 @@
                         class="btn-primary"
                     >
                         {#if loading}
-                            <Loader2 size={18} class="animate-spin" />
+                            <Loader2 size={16} class="animate-spin" />
                             กำลังบันทึก...
                         {:else}
                             บันทึก {reviewableItems.length} รายการ
@@ -419,16 +405,16 @@
 {#if selectedPreview}
     <button
         type="button"
-        class="fixed inset-0 z-[80] bg-slate-950/80 p-4 backdrop-blur-sm"
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4"
         aria-label="Close preview"
         on:click={() => (selectedPreview = null)}
-        in:fade
-        out:fade
+        in:fade={{ duration: 150 }}
+        out:fade={{ duration: 100 }}
     >
         <img
             src={selectedPreview}
             alt="Slip preview"
-            class="mx-auto max-h-[90vh] max-w-full rounded-[28px] object-contain shadow-2xl"
+            class="max-h-[90vh] max-w-full rounded-xl object-contain"
             in:scale
         />
         <span class="sr-only">Close preview</span>

@@ -6,28 +6,20 @@
     let loading = false;
 </script>
 
-<div
-    class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8"
->
-    <div class="sm:mx-auto sm:w-full sm:max-w-md">
-        <div class="flex justify-center">
-            <div class="bg-indigo-600 p-3 rounded-xl shadow-lg">
-                <Lock class="text-white" size={32} />
+<div class="min-h-screen bg-slate-50 flex flex-col justify-center px-4">
+    <div class="mx-auto w-full max-w-sm">
+        <div class="flex justify-center mb-6">
+            <div class="bg-indigo-600 p-3 rounded-xl">
+                <Lock class="text-white" size={28} />
             </div>
         </div>
-        <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        <h2 class="text-center text-2xl font-bold text-slate-900 font-display mb-6">
             เข้าสู่ระบบ SharePay
         </h2>
-    </div>
 
-    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div
-            class="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-100"
-        >
+        <div class="surface-card p-6">
             {#if form?.error}
-                <div
-                    class="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-6"
-                >
+                <div class="rounded-xl bg-rose-50 border border-rose-200 text-rose-600 px-3 py-2.5 text-sm mb-4">
                     {form.error}
                 </div>
             {/if}
@@ -46,7 +38,7 @@
                 <button
                     type="submit"
                     disabled={loading}
-                    class="w-full flex justify-center items-center gap-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-all"
+                    class="w-full flex justify-center items-center gap-2.5 py-2.5 px-4 border border-slate-200 rounded-xl bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
                 >
                     {#if loading}
                         กำลังเชื่อมต่อ...

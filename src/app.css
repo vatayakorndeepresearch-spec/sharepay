@@ -28,50 +28,47 @@
 @layer components {
   .app-shell {
     @apply min-h-screen bg-slate-50 text-slate-900;
-    background-image:
-      radial-gradient(circle at top right, rgba(79, 70, 229, 0.08), transparent 32%),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 1));
   }
 
   .page-shell {
-    @apply space-y-6 pb-24;
+    @apply space-y-4 pb-24;
   }
 
   .surface-card {
-    @apply bg-white rounded-[28px] border border-slate-200 shadow-sm;
+    @apply bg-white rounded-2xl border border-slate-200;
   }
 
   .surface-card-soft {
-    @apply bg-white/80 backdrop-blur-md rounded-[28px] border border-white shadow-sm;
+    @apply bg-white rounded-2xl border border-slate-100;
   }
 
   .section-label {
-    @apply text-[11px] font-semibold text-slate-500;
+    @apply text-xs font-semibold text-slate-400 uppercase tracking-wide;
   }
 
   .eyebrow {
-    @apply text-[11px] font-semibold text-slate-500;
+    @apply text-xs font-semibold text-slate-400 uppercase tracking-wide;
   }
 
   .field-label {
-    @apply block text-[13px] font-semibold text-slate-600 mb-2;
+    @apply block text-sm font-medium text-slate-600 mb-1.5;
   }
 
   .field-input {
-    @apply w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-colors;
   }
 
   .field-input-hero {
-    @apply w-full rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-3xl font-black text-slate-900 placeholder:text-slate-300 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-3xl font-bold text-slate-900 placeholder:text-slate-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-colors;
     font-family: 'Outfit', sans-serif;
   }
 
   .identity-chip {
-    @apply flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700;
+    @apply flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-700;
   }
 
   .filter-chip {
-    @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors;
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors;
   }
 
   .filter-chip-active {
@@ -79,65 +76,40 @@
   }
 
   .status-chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold;
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold;
   }
 
   .sticky-action-bar {
-    @apply fixed left-0 right-0 z-40 bg-white/80 px-5 pt-4 backdrop-blur-2xl;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
-    padding-bottom: 20px;
-  }
-
-  .sticky-action-bar::before {
-    content: "";
-    @apply pointer-events-none absolute inset-x-0 -top-8 h-8;
-    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.8));
+    @apply fixed left-0 right-0 z-40 bg-white/90 backdrop-blur-md px-4 pt-3 border-t border-slate-100;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+    padding-bottom: 16px;
   }
 
   .sticky-action-bar .btn-primary {
-    @apply relative flex flex-[1.4] items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-bold text-white transition-all duration-200 active:scale-[0.97];
-    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-    box-shadow: 0 8px 24px -4px rgba(99, 74, 226, 0.45), 0 2px 8px -2px rgba(99, 74, 226, 0.3);
+    @apply relative flex flex-[1.4] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:bg-indigo-700;
   }
 
   .sticky-action-bar .btn-primary:disabled {
     @apply opacity-50;
-    box-shadow: none;
   }
 
   .sticky-action-bar .btn-secondary {
-    @apply flex flex-1 items-center justify-center rounded-full bg-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-500 transition-all duration-200 active:scale-[0.97] active:bg-slate-200;
+    @apply flex flex-1 items-center justify-center rounded-xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-600 transition-all active:scale-[0.98] hover:bg-slate-200;
   }
 
   .sticky-action-bar .btn-success {
-    @apply relative flex w-full items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-bold text-white transition-all duration-200 active:scale-[0.97];
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-    box-shadow: 0 8px 24px -4px rgba(16, 185, 129, 0.45), 0 2px 8px -2px rgba(16, 185, 129, 0.3);
+    @apply relative flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:bg-emerald-700;
   }
 
   .sheet-panel {
-    @apply fixed inset-x-0 bottom-0 z-[70] rounded-t-[32px] border border-slate-200 bg-white px-5 pt-4 pb-6 shadow-[0_-20px_60px_rgba(15,23,42,0.18)];
+    @apply fixed inset-x-0 bottom-0 z-[70] rounded-t-2xl border-t border-slate-200 bg-white px-5 pt-4 pb-6 shadow-lg;
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
-  }
-
-  .glass-card {
-    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
-  }
-
-  .premium-shadow {
-    box-shadow: 0 14px 40px -18px rgba(79, 70, 229, 0.18), 0 8px 18px -12px rgba(15, 23, 42, 0.12);
-  }
-
-  .btn-premium {
-    @apply relative overflow-hidden px-6 py-3 rounded-2xl font-bold transition-all duration-300 
-           active:scale-95 shadow-lg hover:shadow-indigo-500/25;
   }
 }
 
-/* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -145,16 +117,5 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
-}
-
-/* Page Transitions */
-.page-fade-enter {
-  opacity: 0;
-  transform: translateY(10px);
-}
-.page-fade-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 300ms ease, transform 300ms ease;
+  @apply bg-slate-300 rounded-full;
 }
