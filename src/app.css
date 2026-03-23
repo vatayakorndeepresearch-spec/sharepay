@@ -18,6 +18,11 @@
     @apply antialiased text-gray-900 bg-slate-50;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  a, button, label, select, input, textarea {
+    touch-action: manipulation;
   }
 
   h1, h2, h3, h4, h5, h6, .font-display {

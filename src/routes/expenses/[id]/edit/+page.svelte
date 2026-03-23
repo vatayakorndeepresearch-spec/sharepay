@@ -1,5 +1,6 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
+    import { onDestroy } from "svelte";
     import {
         ArrowDownLeft,
         ArrowUpRight,
@@ -9,7 +10,7 @@
         ScanLine,
         Trash2,
     } from "lucide-svelte";
-    import { getOCRWorker } from "$lib/stores/ocrStore";
+    import { getOCRWorker, terminateOCRWorker } from "$lib/stores/ocrStore";
     import { preprocessImage } from "$lib/utils/imageProcessor";
     import {
         extractExpenseData,
@@ -102,6 +103,10 @@
             reader.readAsDataURL(file);
         });
     }
+
+    onDestroy(() => {
+        terminateOCRWorker();
+    });
 </script>
 
 <div class="page-shell pb-36">

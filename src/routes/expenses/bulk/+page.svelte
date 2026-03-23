@@ -1,5 +1,6 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
+    import { onDestroy } from "svelte";
     import {
         CheckCircle2,
         ChevronDown,
@@ -11,7 +12,7 @@
         X,
     } from "lucide-svelte";
     import { fade, fly, scale } from "svelte/transition";
-    import { getOCRWorker } from "$lib/stores/ocrStore";
+    import { getOCRWorker, terminateOCRWorker } from "$lib/stores/ocrStore";
     import { preprocessImage } from "$lib/utils/imageProcessor";
     import {
         extractExpenseData,
@@ -125,6 +126,10 @@
     }
 
     $: reviewableItems = items;
+
+    onDestroy(() => {
+        terminateOCRWorker();
+    });
 </script>
 
 <div class="page-shell pb-36">

@@ -4,25 +4,37 @@ import { resolveCategory } from '$lib/utils/expenseForm';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, parent }) => {
     const { id } = params;
-    const { currentProfileId, currentUser } = await parent();
-
-    const { data: expense } = await supabase
+    const parentPromise = parent();
+    const expensePromise = supabase
         .from('expenses')
         .select('*')
         .eq('id', id)
         .single();
+    const projectsPromise = supabase
+        .from('projects')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+    const attachmentsPromise = supabase
+        .from('expense_attachments')
+        .select('*')
+        .eq('expense_id', id);
+
+    const [
+        { currentProfileId, currentUser },
+        { data: expense },
+        { data: projects },
+        { data: attachments }
+    ] = await Promise.all([
+        parentPromise,
+        expensePromise,
+        projectsPromise,
+        attachmentsPromise
+    ]);
 
     if (!expense) {
         throw redirect(303, '/expenses');
     }
-
-    const { data: projects } = await supabase.from('projects').select('*').eq('is_active', true).order('name');
-
-    // Load attachments
-    const { data: attachments } = await supabase
-        .from('expense_attachments')
-        .select('*')
-        .eq('expense_id', id);
 
     return {
         expense: { ...expense, attachments: attachments || [] },

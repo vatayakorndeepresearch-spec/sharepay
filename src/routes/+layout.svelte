@@ -1,8 +1,6 @@
 <script lang="ts">
   import "../app.css";
   import { page } from "$app/stores";
-  import { onDestroy } from "svelte";
-  import { terminateOCRWorker } from "$lib/stores/ocrStore";
   import {
     Home,
     Plus,
@@ -20,19 +18,11 @@
   function isActive(pathname: string, href: string) {
     return pathname === href || (href !== "/" && pathname.startsWith(href));
   }
-
-  onDestroy(() => {
-    terminateOCRWorker();
-  });
 </script>
 
 <div class="app-shell pb-20">
   <main class="max-w-md mx-auto px-4 pt-4 pb-8">
-    {#key $page.url.pathname}
-      <div class="page-transition" in:fade={{ duration: 150, delay: 80 }} out:fade={{ duration: 80 }}>
-        <slot />
-      </div>
-    {/key}
+    <slot />
   </main>
 
   {#if showEntrySheet}

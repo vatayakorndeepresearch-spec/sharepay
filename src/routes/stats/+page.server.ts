@@ -1,33 +1,44 @@
 import type { PageServerLoad } from './$types';
 
+type StatsSummaryRow = {
+    category_labels: string[] | null;
+    category_values: Array<number | string> | null;
+    monthly_months: string[] | null;
+    monthly_values: Array<number | string> | null;
+    top_spender_name: string | null;
+    top_spender_amount: number | string | null;
+    top_category_name: string | null;
+    top_category_amount: number | string | null;
+    total_expense: number | string | null;
+    this_month_expense: number | string | null;
+};
+
 export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
     const projectId = url.searchParams.get('projectId') || 'all';
+    const scopedProjectId = projectId === 'all' ? null : projectId;
 
-    const { data: projects } = await supabase
-        .from('projects')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('name');
+    const [
+        { data: projects, error: projectsError },
+        { data: statsRows, error: statsError }
+    ] = await Promise.all([
+        supabase
+            .from('projects')
+            .select('id, name')
+            .eq('is_active', true)
+            .order('name'),
+        supabase.rpc('get_stats_summary', {
+            p_project_id: scopedProjectId
+        })
+    ]);
 
-    let query = supabase
-        .from('expenses')
-        .select(`
-            amount,
-            category,
-            paid_at,
-            transaction_type,
-            paid_by (display_name)
-        `)
-        .order('paid_at', { ascending: true });
-
-    if (projectId !== 'all') {
-        query = query.eq('project_id', projectId);
+    if (projectsError) {
+        console.error('Error fetching projects:', projectsError);
+    }
+    if (statsError) {
+        console.error('Error fetching stats summary:', statsError);
     }
 
-    const { data: records, error } = await query;
-
-    if (error) {
-        console.error('Error fetching expenses:', error);
+    if (statsError) {
         return {
             categoryData: { labels: [], datasets: [] },
             monthlyData: { labels: [], datasets: [] },
@@ -40,67 +51,49 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
         };
     }
 
-    const expenses = (records || []).filter((record) => record.transaction_type === 'expense');
-    const now = new Date();
-
-    const categoryMap = new Map<string, number>();
-    const monthlyMap = new Map<string, number>();
-    const spenderMap = new Map<string, number>();
-
-    let totalExpense = 0;
-    let thisMonthExpense = 0;
-
-    expenses.forEach((record) => {
-        const amount = Number(record.amount);
-        totalExpense += amount;
-
-        const date = new Date(record.paid_at);
-        if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) {
-            thisMonthExpense += amount;
-        }
-
-        const category = record.category || 'ไม่ระบุหมวดหมู่';
-        categoryMap.set(category, (categoryMap.get(category) || 0) + amount);
-
-        const monthYear = date.toLocaleString('th-TH', { month: 'short', year: '2-digit' });
-        monthlyMap.set(monthYear, (monthlyMap.get(monthYear) || 0) + amount);
-
-        const paidBy = Array.isArray(record.paid_by) ? record.paid_by[0] : record.paid_by;
-        const name = paidBy?.display_name || 'Unknown';
-        spenderMap.set(name, (spenderMap.get(name) || 0) + amount);
-    });
-
-    const sortedCategories = Array.from(categoryMap.entries()).sort((a, b) => b[1] - a[1]);
-    const topCategory = sortedCategories[0]
-        ? { name: sortedCategories[0][0], amount: sortedCategories[0][1] }
-        : { name: '-', amount: 0 };
-
-    const topSpenderEntry = Array.from(spenderMap.entries()).sort((a, b) => b[1] - a[1])[0];
-    const topSpender = topSpenderEntry
-        ? { name: topSpenderEntry[0], amount: topSpenderEntry[1] }
-        : { name: '-', amount: 0 };
+    const stats = ((statsRows as StatsSummaryRow[] | null)?.[0]) || {
+        category_labels: [],
+        category_values: [],
+        monthly_months: [],
+        monthly_values: [],
+        top_spender_name: '-',
+        top_spender_amount: 0,
+        top_category_name: '-',
+        top_category_amount: 0,
+        total_expense: 0,
+        this_month_expense: 0
+    };
+    const monthlyLabels = (stats.monthly_months || []).map((month) =>
+        new Date(`${month}T00:00:00`).toLocaleString('th-TH', { month: 'short', year: '2-digit' })
+    );
 
     return {
         categoryData: {
-            labels: sortedCategories.map(([label]) => label),
+            labels: stats.category_labels || [],
             datasets: [{
-                data: sortedCategories.map(([, value]) => value),
+                data: (stats.category_values || []).map((value) => Number(value || 0)),
                 backgroundColor: ['#4f46e5', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#0f172a']
             }]
         },
         monthlyData: {
-            labels: Array.from(monthlyMap.keys()),
+            labels: monthlyLabels,
             datasets: [{
                 label: 'รายจ่ายรายเดือน',
-                data: Array.from(monthlyMap.values()),
+                data: (stats.monthly_values || []).map((value) => Number(value || 0)),
                 backgroundColor: '#4f46e5',
                 borderRadius: 8
             }]
         },
-        topSpender,
-        topCategory,
-        totalExpense,
-        thisMonthExpense,
+        topSpender: {
+            name: stats.top_spender_name || '-',
+            amount: Number(stats.top_spender_amount || 0)
+        },
+        topCategory: {
+            name: stats.top_category_name || '-',
+            amount: Number(stats.top_category_amount || 0)
+        },
+        totalExpense: Number(stats.total_expense || 0),
+        thisMonthExpense: Number(stats.this_month_expense || 0),
         projects: projects || [],
         selectedProjectId: projectId
     };

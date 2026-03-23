@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { createWorker, type Worker } from 'tesseract.js';
+import type { Worker } from 'tesseract.js';
 
 interface OCRState {
     worker: Worker | null;
@@ -41,6 +41,7 @@ export async function getOCRWorker() {
     ocrStore.update(s => ({ ...s, status: 'initializing' }));
 
     try {
+        const { createWorker } = await import('tesseract.js');
         const worker = await createWorker('tha+eng');
         ocrStore.update(s => ({ ...s, worker, status: 'ready', error: null }));
         return worker;

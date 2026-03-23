@@ -13,6 +13,11 @@
 
     export let data;
 
+    function getProfileName(profile: { display_name?: string } | { display_name?: string }[] | null | undefined) {
+        const value = Array.isArray(profile) ? profile[0] : profile;
+        return value?.display_name || "ไม่ระบุ";
+    }
+
     $: settlementSummary = data.settlementSummary;
     $: projectCards = Object.values(data.projectSummary || {});
 </script>
@@ -135,7 +140,7 @@
                                 <div class="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
                                     <span>{formatDate(expense.paid_at)}</span>
                                     <span class="text-slate-300">·</span>
-                                    <span>{expense.profiles?.display_name || "ไม่ระบุ"}</span>
+                                    <span>{getProfileName(expense.profiles)}</span>
                                     {#if expense.transaction_type === "expense"}
                                         <span
                                             class={`status-chip ${

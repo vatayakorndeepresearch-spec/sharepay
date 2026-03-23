@@ -3,9 +3,8 @@ import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, parent }) => {
     const { id } = params;
-    const { currentProfileId, currentUser } = await parent();
-
-    const { data: expense } = await supabase
+    const parentPromise = parent();
+    const expensePromise = supabase
         .from('expenses')
         .select(`
             *,
@@ -15,15 +14,24 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
         `)
         .eq('id', id)
         .single();
+    const attachmentsPromise = supabase
+        .from('expense_attachments')
+        .select('*')
+        .eq('expense_id', id);
+
+    const [
+        { currentProfileId, currentUser },
+        { data: expense },
+        { data: attachments }
+    ] = await Promise.all([
+        parentPromise,
+        expensePromise,
+        attachmentsPromise
+    ]);
 
     if (!expense) {
         throw error(404, 'ไม่พบรายการนี้');
     }
-
-    const { data: attachments } = await supabase
-        .from('expense_attachments')
-        .select('*')
-        .eq('expense_id', id);
 
     const actionState = {
         canReimburse: !expense.is_reimbursed && expense.transaction_type === 'expense',

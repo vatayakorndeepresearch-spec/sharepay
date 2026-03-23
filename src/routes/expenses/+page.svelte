@@ -22,7 +22,18 @@
 
     type ExpenseRecord = (typeof data.expenses)[number];
 
-    function updateQuery(next: Record<string, string>) {
+    function getProfileName(profile: { display_name?: string } | { display_name?: string }[] | null | undefined) {
+        const value = Array.isArray(profile) ? profile[0] : profile;
+        return value?.display_name || "ไม่ระบุ";
+    }
+
+    function getProjectName(project: { name?: string } | { name?: string }[] | null | undefined) {
+        const value = Array.isArray(project) ? project[0] : project;
+        return value?.name || "ไม่ระบุโปรเจค";
+    }
+
+    function updateQuery(next: Record<string, string>, options: { resetPage?: boolean } = {}) {
+        const { resetPage = true } = options;
         const query = new URLSearchParams($page.url.searchParams);
 
         Object.entries(next).forEach(([key, value]) => {
@@ -32,6 +43,12 @@
                 query.set(key, value);
             }
         });
+
+        if (resetPage) {
+            query.delete("page");
+        } else if (query.get("page") === "1") {
+            query.delete("page");
+        }
 
         goto(query.size ? `?${query.toString()}` : "/expenses");
     }
@@ -80,6 +97,7 @@
 
     $: activeQuickMode = getQuickMode(data.filters);
     $: dateGroups = groupedExpenses(data.expenses);
+    $: loadedCount = data.expenses.length;
     $: selectedProjectName =
         data.filters.project === "all"
             ? "ทุกโปรเจค"
@@ -194,9 +212,9 @@
                                         <div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
                                             <span>{formatDate(expense.paid_at)}</span>
                                             <span class="text-slate-300">·</span>
-                                            <span>{expense.profiles?.display_name || "ไม่ระบุ"}</span>
+                                            <span>{getProfileName(expense.profiles)}</span>
                                             <span class="text-slate-300">·</span>
-                                            <span>{expense.projects?.name}</span>
+                                            <span>{getProjectName(expense.projects)}</span>
                                         </div>
                                         {#if expense.transaction_type === "expense"}
                                             <div class="mt-1">
@@ -230,6 +248,17 @@
                     </div>
                 </div>
             {/each}
+
+            {#if data.pagination.hasMore}
+                <button
+                    type="button"
+                    class="surface-card w-full rounded-2xl p-3 text-sm font-semibold text-indigo-600"
+                    on:click={() =>
+                        updateQuery({ page: String(data.pagination.page + 1) }, { resetPage: false })}
+                >
+                    โหลดเพิ่ม · แสดงแล้ว {loadedCount} จาก {data.summaryTotals.filteredCount} รายการ
+                </button>
+            {/if}
         </section>
     {/if}
 </div>

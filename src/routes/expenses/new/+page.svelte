@@ -1,5 +1,6 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
+    import { onDestroy } from "svelte";
     import {
         ArrowDownLeft,
         ArrowUpRight,
@@ -10,7 +11,7 @@
         Sparkles,
     } from "lucide-svelte";
     import { fade, slide } from "svelte/transition";
-    import { getOCRWorker } from "$lib/stores/ocrStore";
+    import { getOCRWorker, terminateOCRWorker } from "$lib/stores/ocrStore";
     import { preprocessImage } from "$lib/utils/imageProcessor";
     import {
         extractExpenseData,
@@ -90,6 +91,10 @@
 
         previewUrls = files.map((file) => URL.createObjectURL(file));
     }
+
+    onDestroy(() => {
+        terminateOCRWorker();
+    });
 </script>
 
 <div class="page-shell pb-36">

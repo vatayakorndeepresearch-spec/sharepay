@@ -1,88 +1,89 @@
 import type { PageServerLoad } from './$types';
 
 type SettlementState = 'you_owe' | 'owed_to_you' | 'clear' | 'unknown';
+type SettlementSummaryRow = {
+    state: SettlementState;
+    amount: number | string | null;
+    other_party_name: string | null;
+    unpaid_count: number | null;
+};
+type ProjectFinancialSummaryRow = {
+    project_id: string;
+    project_name: string;
+    income_total: number | string | null;
+    expense_total: number | string | null;
+};
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
-    const { currentProfileId, currentUser } = await parent();
+    const parentPromise = parent();
+    const recentExpensesPromise = supabase
+        .from('expenses')
+        .select(`
+            id,
+            amount,
+            paid_at,
+            description,
+            transaction_type,
+            is_reimbursed,
+            projects (name),
+            profiles!expenses_paid_by_fkey (display_name)
+        `)
+        .order('paid_at', { ascending: false })
+        .limit(8);
+    const projectSummaryPromise = supabase.rpc('get_project_financial_summary');
 
-    const [{ data: expenses }, { data: allExpenses }, { data: profiles }] = await Promise.all([
-        supabase
-            .from('expenses')
-            .select(`
-                *,
-                projects (name),
-                profiles!expenses_paid_by_fkey (display_name)
-            `)
-            .order('paid_at', { ascending: false })
-            .limit(8),
-        supabase
-            .from('expenses')
-            .select(`
-                amount,
-                transaction_type,
-                paid_by,
-                is_reimbursed,
-                projects (id, name)
-            `)
-            .limit(5000),
-        supabase
-            .from('profiles')
-            .select('id, display_name')
-            .order('created_at', { ascending: true })
-            .limit(2)
+    const { currentProfileId, currentUser } = await parentPromise;
+    const settlementPromise = currentProfileId
+        ? supabase.rpc('get_settlement_summary', { p_current_profile_id: currentProfileId })
+        : Promise.resolve({
+            data: [{
+                state: 'unknown' as SettlementState,
+                amount: 0,
+                other_party_name: null,
+                unpaid_count: 0
+            }],
+            error: null
+        });
+
+    const [
+        { data: expenses, error: expensesError },
+        { data: projectSummaryRows, error: projectSummaryError },
+        { data: settlementRows, error: settlementError }
+    ] = await Promise.all([
+        recentExpensesPromise,
+        projectSummaryPromise,
+        settlementPromise
     ]);
 
+    if (expensesError) {
+        console.error('Error fetching recent expenses:', expensesError);
+    }
+    if (projectSummaryError) {
+        console.error('Error fetching project financial summary:', projectSummaryError);
+    }
+    if (settlementError) {
+        console.error('Error fetching settlement summary:', settlementError);
+    }
+
     const projectSummary: Record<string, { name: string; income: number; expense: number }> = {};
-    const payerMap: Record<string, number> = {};
-    let unpaidCount = 0;
-
-    allExpenses?.forEach((item) => {
-        const project = item.projects as { id?: string; name?: string } | null;
-        if (project?.id) {
-            if (!projectSummary[project.id]) {
-                projectSummary[project.id] = {
-                    name: project.name || 'ไม่ระบุโปรเจค',
-                    income: 0,
-                    expense: 0
-                };
-            }
-
-            if (item.transaction_type === 'income') {
-                projectSummary[project.id].income += Number(item.amount);
-            } else {
-                projectSummary[project.id].expense += Number(item.amount);
-            }
-        }
-
-        if (item.transaction_type === 'expense' && !item.is_reimbursed) {
-            payerMap[item.paid_by] = (payerMap[item.paid_by] || 0) + Number(item.amount);
-            unpaidCount++;
-        }
+    (projectSummaryRows as ProjectFinancialSummaryRow[] | null)?.forEach((row) => {
+        projectSummary[row.project_id] = {
+            name: row.project_name || 'ไม่ระบุโปรเจค',
+            income: Number(row.income_total || 0),
+            expense: Number(row.expense_total || 0)
+        };
     });
 
-    let settlementState: SettlementState = 'unknown';
-    let settlementAmount = 0;
-    let otherPartyName: string | null = null;
-
-    if (profiles && profiles.length >= 2 && currentProfileId && profiles.some((profile) => profile.id === currentProfileId)) {
-        const currentProfile = profiles.find((profile) => profile.id === currentProfileId)!;
-        const otherProfile = profiles.find((profile) => profile.id !== currentProfileId)!;
-        const currentPaid = payerMap[currentProfile.id] || 0;
-        const otherPaid = payerMap[otherProfile.id] || 0;
-        const diff = currentPaid - otherPaid;
-
-        otherPartyName = otherProfile.display_name;
-
-        if (diff > 0) {
-            settlementState = 'owed_to_you';
-            settlementAmount = diff;
-        } else if (diff < 0) {
-            settlementState = 'you_owe';
-            settlementAmount = Math.abs(diff);
-        } else {
-            settlementState = 'clear';
-        }
-    }
+    const settlementRow = ((settlementRows as SettlementSummaryRow[] | null)?.[0]) || {
+        state: 'unknown' as SettlementState,
+        amount: 0,
+        other_party_name: null,
+        unpaid_count: 0
+    };
+    const settlementState = settlementRow.state;
+    const settlementAmount = Number(settlementRow.amount || 0);
+    const otherPartyName = settlementRow.other_party_name;
+    const unpaidCount = Number(settlementRow.unpaid_count || 0);
 
     const settlementSummary = {
         state: settlementState,
