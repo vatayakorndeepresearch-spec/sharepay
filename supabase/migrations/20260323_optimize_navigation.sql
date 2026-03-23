@@ -132,11 +132,13 @@ AS $$
 $$;
 
 DROP FUNCTION IF EXISTS public.get_expense_list_summary(uuid, text, text);
+DROP FUNCTION IF EXISTS public.get_expense_list_summary(uuid, text, text, text);
 
 CREATE OR REPLACE FUNCTION public.get_expense_list_summary(
     p_project_id uuid DEFAULT NULL,
     p_status text DEFAULT 'all',
-    p_type text DEFAULT 'all'
+    p_type text DEFAULT 'all',
+    p_month text DEFAULT 'all'
 )
 RETURNS TABLE (
     all_count integer,
@@ -153,7 +155,8 @@ AS $$
     WITH scoped AS (
         SELECT e.transaction_type, e.is_reimbursed, e.amount
         FROM public.expenses e
-        WHERE p_project_id IS NULL OR e.project_id = p_project_id
+        WHERE (p_project_id IS NULL OR e.project_id = p_project_id)
+          AND (p_month = 'all' OR to_char(e.paid_at, 'YYYY-MM') = p_month)
     ),
     filtered AS (
         SELECT s.amount
@@ -275,5 +278,5 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_project_financial_summary() TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.get_settlement_summary(uuid) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_expense_list_summary(uuid, text, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_expense_list_summary(uuid, text, text, text) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.get_stats_summary(uuid) TO anon, authenticated, service_role;

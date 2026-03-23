@@ -16,6 +16,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
     const projectId = url.searchParams.get('project') || 'all';
     const status = url.searchParams.get('status') || 'all';
     const type = url.searchParams.get('type') || 'all';
+    const month = url.searchParams.get('month') || 'all';
     const pageParam = Number.parseInt(url.searchParams.get('page') || '1', 10);
     const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
     const scopedProjectId = projectId === 'all' ? null : projectId;
@@ -48,6 +49,14 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
     } else if (status === 'paid') {
         filteredQuery = filteredQuery.eq('is_reimbursed', true);
     }
+    if (month !== 'all') {
+        const [y, m] = month.split('-').map(Number);
+        const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+        const nextMonth = m === 12
+            ? `${y + 1}-01-01`
+            : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        filteredQuery = filteredQuery.gte('paid_at', startDate).lt('paid_at', nextMonth);
+    }
 
     const [
         { data: projects, error: projectsError },
@@ -59,7 +68,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
         supabase.rpc('get_expense_list_summary', {
             p_project_id: scopedProjectId,
             p_status: status,
-            p_type: type
+            p_type: type,
+            p_month: month
         })
     ]);
 
@@ -103,7 +113,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
         filters: {
             project: projectId,
             status,
-            type
+            type,
+            month
         },
         pagination: {
             page,

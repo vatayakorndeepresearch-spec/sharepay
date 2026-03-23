@@ -6,6 +6,7 @@
     import {
         CalendarDays,
         CheckCircle2,
+        ChevronLeft,
         ChevronRight,
         Funnel,
         Receipt,
@@ -102,6 +103,26 @@
         data.filters.project === "all"
             ? "ทุกโปรเจค"
             : data.projects.find((project) => project.id === data.filters.project)?.name || "ทุกโปรเจค";
+    $: currentMonth = data.filters.month;
+    $: monthLabel =
+        currentMonth === "all"
+            ? "ทุกเดือน"
+            : new Date(currentMonth + "-15").toLocaleDateString("th-TH", { month: "long", year: "numeric" });
+
+    function goMonth(direction: -1 | 1) {
+        let y: number, m: number;
+        if (currentMonth === "all") {
+            const now = new Date();
+            y = now.getFullYear();
+            m = now.getMonth() + 1;
+        } else {
+            [y, m] = currentMonth.split("-").map(Number);
+            m += direction;
+            if (m === 0) { y--; m = 12; }
+            if (m === 13) { y++; m = 1; }
+        }
+        updateQuery({ month: `${y}-${String(m).padStart(2, "0")}` });
+    }
 </script>
 
 <div class="page-shell">
@@ -116,6 +137,31 @@
             <SlidersHorizontal size={16} />
         </button>
     </header>
+
+    <section class="surface-card flex items-center justify-between p-3">
+        <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+            on:click={() => goMonth(-1)}
+        >
+            <ChevronLeft size={18} />
+        </button>
+        <button
+            type="button"
+            class="text-sm font-semibold text-slate-900"
+            on:click={() => updateQuery({ month: "all" })}
+        >
+            {monthLabel}
+        </button>
+        <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+            class:invisible={currentMonth === "all"}
+            on:click={() => goMonth(1)}
+        >
+            <ChevronRight size={18} />
+        </button>
+    </section>
 
     <section class="surface-card p-4">
         <div class="mb-3 flex items-center justify-between">
