@@ -17,6 +17,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
     const status = url.searchParams.get('status') || 'all';
     const type = url.searchParams.get('type') || 'all';
     const month = url.searchParams.get('month') || 'all';
+    const q = url.searchParams.get('q')?.trim() || '';
     const pageParam = Number.parseInt(url.searchParams.get('page') || '1', 10);
     const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
     const scopedProjectId = projectId === 'all' ? null : projectId;
@@ -48,6 +49,9 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
         filteredQuery = filteredQuery.eq('is_reimbursed', false);
     } else if (status === 'paid') {
         filteredQuery = filteredQuery.eq('is_reimbursed', true);
+    }
+    if (q) {
+        filteredQuery = filteredQuery.ilike('description', `%${q}%`);
     }
     if (month !== 'all') {
         const [y, m] = month.split('-').map(Number);
@@ -114,7 +118,8 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
             project: projectId,
             status,
             type,
-            month
+            month,
+            q
         },
         pagination: {
             page,

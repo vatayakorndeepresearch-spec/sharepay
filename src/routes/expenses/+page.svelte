@@ -10,6 +10,7 @@
         ChevronRight,
         Funnel,
         Receipt,
+        Search,
         SlidersHorizontal,
         TrendingDown,
         TrendingUp,
@@ -20,6 +21,14 @@
     export let data;
 
     let showAdvancedFilters = false;
+    let searchValue = data.filters.q;
+    let searchTimer: ReturnType<typeof setTimeout>;
+
+    function onSearchInput(e: Event) {
+        const val = (e.currentTarget as HTMLInputElement).value;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => updateQuery({ q: val }), 400);
+    }
 
     type ExpenseRecord = (typeof data.expenses)[number];
 
@@ -137,6 +146,19 @@
             <SlidersHorizontal size={16} />
         </button>
     </header>
+
+    <div class="relative">
+        <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+            <Search size={15} />
+        </span>
+        <input
+            type="search"
+            placeholder="ค้นหารายการ..."
+            class="field-input pl-9"
+            value={searchValue}
+            on:input={onSearchInput}
+        />
+    </div>
 
     <section class="surface-card flex items-center justify-between p-3">
         <button
