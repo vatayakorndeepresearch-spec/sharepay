@@ -17,7 +17,8 @@ export const expenseCategories = [
     'ประกัน',
     'การศึกษา',
     'สัตว์เลี้ยง',
-    'บริจาค/ทำบุญ'
+    'บริจาค/ทำบุญ',
+    'เงินเดือน'
 ] as const;
 
 export const incomeCategories = [
