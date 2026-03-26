@@ -1,11 +1,16 @@
 export const expenseCategories = [
     'อาหาร',
+    'เครื่องดื่ม/ชา/กาแฟ',
     'เดินทาง',
+    'ค่าทางด่วน/จอดรถ',
     'ของใช้',
     'ที่พัก',
     'สุขภาพ',
+    'ความสวยงาม',
     'บันเทิง',
     'ช้อปปิ้ง',
+    'เสื้อผ้า/แฟชั่น',
+    'กีฬา/ฟิตเนส',
     'ค่าน้ำ',
     'ค่าไฟ',
     'ค่าโทรศัพท์',
@@ -14,9 +19,15 @@ export const expenseCategories = [
     'ค่าเช่าบ้าน',
     'ค่าชาร์จรถ',
     'ค่าน้ำมัน',
+    'ค่าผ่อน/หนี้',
+    'ค่าซ่อมแซม/บำรุง',
+    'ค่าบริการ',
+    'ค่าซักรีด',
     'ประกัน',
+    'ภาษี',
     'การศึกษา',
     'สัตว์เลี้ยง',
+    'ของขวัญ/งานสังคม',
     'บริจาค/ทำบุญ',
     'เงินเดือน'
 ] as const;
@@ -26,6 +37,9 @@ export const incomeCategories = [
     'โบนัส',
     'ฟรีแลนซ์',
     'การลงทุน',
+    'ค่าเช่า/รายได้อสังหาฯ',
+    'ขายของ',
+    'รางวัล',
     'ของขวัญ',
     'เงินคืน'
 ] as const;
@@ -101,9 +115,20 @@ export interface ExtractedExpenseData {
 const categoryAliases: Record<string, string> = {
     food: 'อาหาร',
     dining: 'อาหาร',
+    beverage: 'เครื่องดื่ม/ชา/กาแฟ',
+    coffee: 'เครื่องดื่ม/ชา/กาแฟ',
+    drink: 'เครื่องดื่ม/ชา/กาแฟ',
     travel: 'เดินทาง',
     transport: 'เดินทาง',
+    toll: 'ค่าทางด่วน/จอดรถ',
+    parking: 'ค่าทางด่วน/จอดรถ',
     shopping: 'ช้อปปิ้ง',
+    clothing: 'เสื้อผ้า/แฟชั่น',
+    fashion: 'เสื้อผ้า/แฟชั่น',
+    beauty: 'ความสวยงาม',
+    fitness: 'กีฬา/ฟิตเนส',
+    sport: 'กีฬา/ฟิตเนส',
+    gym: 'กีฬา/ฟิตเนส',
     utility: 'ของใช้',
     utilities: 'ของใช้',
     housing: 'ค่าเช่าบ้าน',
@@ -111,15 +136,25 @@ const categoryAliases: Record<string, string> = {
     phone: 'ค่าโทรศัพท์',
     internet: 'ค่าอินเตอร์เน็ต',
     insurance: 'ประกัน',
+    tax: 'ภาษี',
     education: 'การศึกษา',
     pet: 'สัตว์เลี้ยง',
+    repair: 'ค่าซ่อมแซม/บำรุง',
+    maintenance: 'ค่าซ่อมแซม/บำรุง',
+    loan: 'ค่าผ่อน/หนี้',
+    installment: 'ค่าผ่อน/หนี้',
+    debt: 'ค่าผ่อน/หนี้',
+    laundry: 'ค่าซักรีด',
+    service: 'ค่าบริการ',
     donation: 'บริจาค/ทำบุญ',
     gift: 'ของขวัญ',
     refund: 'เงินคืน',
     freelance: 'ฟรีแลนซ์',
     investment: 'การลงทุน',
     salary: 'เงินเดือน',
-    bonus: 'โบนัส'
+    bonus: 'โบนัส',
+    sales: 'ขายของ',
+    prize: 'รางวัล'
 };
 
 const emptyCategoryValues = new Set([
@@ -137,32 +172,46 @@ const emptyCategoryValues = new Set([
 ]);
 
 const expenseCategoryRules: Array<{ category: string; keywords: string[] }> = [
-    { category: 'ค่าน้ำมัน', keywords: ['น้ำมัน', 'fuel', 'ptt', 'บางจาก', 'shell', 'esso', 'caltex'] },
-    { category: 'ค่าชาร์จรถ', keywords: ['ชาร์จรถ', 'ev', 'charge', 'charging'] },
-    { category: 'ค่าอินเตอร์เน็ต', keywords: ['internet', 'wifi', 'fiber', 'เน็ตบ้าน', 'อินเตอร์เน็ต', 'broadband'] },
-    { category: 'ค่าโทรศัพท์', keywords: ['โทรศัพท์', 'มือถือ', 'ais', 'dtac', 'true move', 'truemove', 'sim'] },
-    { category: 'ค่าไฟ', keywords: ['ไฟฟ้า', 'ค่าไฟ', 'electric', 'mea'] },
-    { category: 'ค่าน้ำ', keywords: ['ค่าน้ำ', 'น้ำประปา', 'water bill'] },
-    { category: 'ค่าเช่าบ้าน', keywords: ['เช่าบ้าน', 'ค่าเช่า', 'rent', 'condo', 'apartment'] },
-    { category: 'ค่าสมาชิก/Sub', keywords: ['netflix', 'spotify', 'youtube premium', 'membership', 'subscription', 'sub'] },
-    { category: 'สุขภาพ', keywords: ['ยา', 'หมอ', 'clinic', 'hospital', 'โรงพยาบาล', 'คลินิก', 'doctor', 'pharmacy'] },
-    { category: 'การศึกษา', keywords: ['เรียน', 'course', 'tuition', 'หนังสือเรียน', 'workshop', 'class'] },
-    { category: 'สัตว์เลี้ยง', keywords: ['แมว', 'หมา', 'สัตว์เลี้ยง', 'pet', 'vet', 'อาหารสัตว์'] },
-    { category: 'บริจาค/ทำบุญ', keywords: ['บริจาค', 'ทำบุญ', 'donate', 'donation', 'temple', 'วัด'] },
-    { category: 'ประกัน', keywords: ['ประกัน', 'insurance', 'insured'] },
-    { category: 'ที่พัก', keywords: ['โรงแรม', 'hotel', 'resort', 'ที่พัก', 'booking', 'airbnb'] },
-    { category: 'เดินทาง', keywords: ['grab', 'bolt', 'taxi', 'mrt', 'bts', 'ทางด่วน', 'รถไฟ', 'เดินทาง', 'uber', 'parking'] },
-    { category: 'อาหาร', keywords: ['อาหาร', 'ข้าว', 'กาแฟ', 'coffee', 'cafe', 'restaurant', 'grabfood', 'lineman', 'ชานม', 'กิน', 'สุกี้', 'ชาบู'] },
-    { category: 'ช้อปปิ้ง', keywords: ['shopee', 'lazada', 'shopping', 'เสื้อ', 'รองเท้า', 'cosmetic', 'ของแต่งตัว'] },
-    { category: 'ของใช้', keywords: ['ของใช้', 'ของเข้าบ้าน', 'supermarket', 'lotus', 'big c', '7-11', 'เซเว่น', 'grocer'] },
-    { category: 'บันเทิง', keywords: ['หนัง', 'movie', 'concert', 'เกม', 'game', 'karaoke', 'สวนสนุก', 'entertainment'] }
+    { category: 'ค่าน้ำมัน', keywords: ['น้ำมัน', 'fuel', 'ptt', 'บางจาก', 'shell', 'esso', 'caltex', 'ปั๊ม'] },
+    { category: 'ค่าชาร์จรถ', keywords: ['ชาร์จรถ', 'ev', 'charge', 'charging', 'ea anywhere', 'sharge'] },
+    { category: 'ค่าทางด่วน/จอดรถ', keywords: ['ทางด่วน', 'toll', 'expressway', 'จอดรถ', 'parking', 'ที่จอด', 'easy pass', 'm-pass'] },
+    { category: 'ค่าอินเตอร์เน็ต', keywords: ['internet', 'wifi', 'fiber', 'เน็ตบ้าน', 'อินเตอร์เน็ต', 'broadband', '3bb', 'ais fibre'] },
+    { category: 'ค่าโทรศัพท์', keywords: ['โทรศัพท์', 'มือถือ', 'ais', 'dtac', 'true move', 'truemove', 'sim', 'ค่าโทร'] },
+    { category: 'ค่าไฟ', keywords: ['ไฟฟ้า', 'ค่าไฟ', 'electric', 'mea', 'pea', 'การไฟฟ้า'] },
+    { category: 'ค่าน้ำ', keywords: ['ค่าน้ำ', 'น้ำประปา', 'water bill', 'ประปา'] },
+    { category: 'ค่าเช่าบ้าน', keywords: ['เช่าบ้าน', 'ค่าเช่า', 'rent', 'condo', 'apartment', 'ค่าส่วนกลาง', 'นิติ'] },
+    { category: 'ค่าสมาชิก/Sub', keywords: ['netflix', 'spotify', 'youtube premium', 'membership', 'subscription', 'sub', 'disney+', 'apple music', 'icloud', 'chatgpt', 'claude'] },
+    { category: 'ค่าผ่อน/หนี้', keywords: ['ผ่อน', 'installment', 'สินเชื่อ', 'หนี้', 'loan', 'กู้', 'ผ่อนบ้าน', 'ผ่อนรถ', 'ผ่อนมือถือ', 'บัตรเครดิต', 'credit card'] },
+    { category: 'ค่าซ่อมแซม/บำรุง', keywords: ['ซ่อม', 'repair', 'maintenance', 'บำรุง', 'เปลี่ยนยาง', 'ช่าง', 'fix', 'เซอร์วิส', 'service รถ'] },
+    { category: 'ค่าบริการ', keywords: ['ค่าบริการ', 'ค่าธรรมเนียม', 'fee', 'commission', 'ค่าโอน', 'ค่าส่ง', 'delivery fee'] },
+    { category: 'ค่าซักรีด', keywords: ['ซักรีด', 'laundry', 'ซักผ้า', 'ร้านซัก', 'dry clean'] },
+    { category: 'ภาษี', keywords: ['ภาษี', 'tax', 'สรรพากร', 'vat', 'พ.ร.บ.', 'ต่อทะเบียน', 'ภาษีรถ'] },
+    { category: 'สุขภาพ', keywords: ['ยา', 'หมอ', 'clinic', 'hospital', 'โรงพยาบาล', 'คลินิก', 'doctor', 'pharmacy', 'ทันตกรรม', 'ฟัน', 'แว่นตา', 'คอนแทค', 'วิตามิน', 'อาหารเสริม'] },
+    { category: 'ความสวยงาม', keywords: ['เสริมสวย', 'ร้านทำผม', 'ตัดผม', 'ทำเล็บ', 'สปา', 'spa', 'facial', 'skincare', 'ครีม', 'เครื่องสำอาง', 'makeup', 'salon', 'beauty'] },
+    { category: 'กีฬา/ฟิตเนส', keywords: ['ฟิตเนส', 'fitness', 'gym', 'ยิม', 'โยคะ', 'yoga', 'วิ่ง', 'ว่ายน้ำ', 'กีฬา', 'sport', 'สนามกอล์ฟ', 'แบดมินตัน'] },
+    { category: 'การศึกษา', keywords: ['เรียน', 'course', 'tuition', 'หนังสือเรียน', 'workshop', 'class', 'udemy', 'coursera', 'ค่าเทอม', 'กวดวิชา', 'สอบ'] },
+    { category: 'สัตว์เลี้ยง', keywords: ['แมว', 'หมา', 'สัตว์เลี้ยง', 'pet', 'vet', 'อาหารสัตว์', 'สัตวแพทย์', 'ทรายแมว'] },
+    { category: 'บริจาค/ทำบุญ', keywords: ['บริจาค', 'ทำบุญ', 'donate', 'donation', 'temple', 'วัด', 'กฐิน', 'ทอดผ้าป่า'] },
+    { category: 'ของขวัญ/งานสังคม', keywords: ['ของขวัญ', 'ซองงาน', 'งานแต่ง', 'งานบวช', 'งานศพ', 'gift', 'วันเกิด', 'birthday', 'ช่อดอกไม้', 'พวงหรีด'] },
+    { category: 'ประกัน', keywords: ['ประกัน', 'insurance', 'insured', 'ประกันชีวิต', 'ประกันรถ', 'ประกันสุขภาพ'] },
+    { category: 'ที่พัก', keywords: ['โรงแรม', 'hotel', 'resort', 'ที่พัก', 'booking', 'airbnb', 'agoda', 'hostel'] },
+    { category: 'เดินทาง', keywords: ['grab', 'bolt', 'taxi', 'mrt', 'bts', 'รถไฟ', 'เดินทาง', 'uber', 'รถเมล์', 'เรือ', 'เครื่องบิน', 'ตั๋วเครื่องบิน', 'สายการบิน'] },
+    { category: 'เครื่องดื่ม/ชา/กาแฟ', keywords: ['กาแฟ', 'coffee', 'cafe', 'คาเฟ่', 'ชานม', 'ชาไข่มุก', 'สตาร์บัค', 'starbucks', 'amazon', 'เครื่องดื่ม', 'น้ำปั่น', 'smoothie', 'boba'] },
+    { category: 'อาหาร', keywords: ['อาหาร', 'ข้าว', 'restaurant', 'grabfood', 'lineman', 'กิน', 'สุกี้', 'ชาบู', 'ก๋วยเตี๋ยว', 'ส้มตำ', 'พิซซ่า', 'แมค', 'kfc', 'foodpanda', 'robinhood'] },
+    { category: 'เสื้อผ้า/แฟชั่น', keywords: ['เสื้อ', 'กางเกง', 'รองเท้า', 'กระเป๋า', 'นาฬิกา', 'แว่น', 'เครื่องประดับ', 'จิวเวลรี่', 'uniqlo', 'h&m', 'zara'] },
+    { category: 'ช้อปปิ้ง', keywords: ['shopee', 'lazada', 'shopping', 'tiktok shop', 'ออนไลน์', 'สั่งของ'] },
+    { category: 'ของใช้', keywords: ['ของใช้', 'ของเข้าบ้าน', 'supermarket', 'lotus', 'big c', '7-11', 'เซเว่น', 'grocer', 'makro', 'tops', 'กระดาษ', 'น้ำยา'] },
+    { category: 'บันเทิง', keywords: ['หนัง', 'movie', 'concert', 'เกม', 'game', 'karaoke', 'สวนสนุก', 'entertainment', 'ท่องเที่ยว', 'เที่ยว', 'พิพิธภัณฑ์', 'สวนน้ำ'] }
 ];
 
 const incomeCategoryRules: Array<{ category: string; keywords: string[] }> = [
     { category: 'เงินเดือน', keywords: ['เงินเดือน', 'salary', 'payroll'] },
     { category: 'โบนัส', keywords: ['โบนัส', 'bonus'] },
     { category: 'ฟรีแลนซ์', keywords: ['freelance', 'ฟรีแลนซ์', 'commission', 'ค่าจ้าง'] },
-    { category: 'การลงทุน', keywords: ['หุ้น', 'dividend', 'ลงทุน', 'investment', 'interest', 'ดอกเบี้ย'] },
+    { category: 'การลงทุน', keywords: ['หุ้น', 'dividend', 'ลงทุน', 'investment', 'interest', 'ดอกเบี้ย', 'crypto', 'คริปโต'] },
+    { category: 'ค่าเช่า/รายได้อสังหาฯ', keywords: ['ค่าเช่า', 'rental income', 'ผู้เช่า', 'เก็บค่าเช่า'] },
+    { category: 'ขายของ', keywords: ['ขายของ', 'ขาย', 'sales', 'sold', 'รายได้จากการขาย'] },
+    { category: 'รางวัล', keywords: ['รางวัล', 'prize', 'award', 'lottery', 'หวย', 'ล็อตเตอรี่'] },
     { category: 'เงินคืน', keywords: ['refund', 'cashback', 'คืนเงิน', 'rebate'] },
     { category: 'ของขวัญ', keywords: ['gift', 'ของขวัญ', 'รับซอง'] }
 ];
@@ -225,6 +274,30 @@ export function resolveCategory(input: {
     }
 
     return 'ไม่ระบุหมวดหมู่';
+}
+
+export async function aiCategorize(input: {
+    transactionType: TransactionType;
+    description?: string | null;
+    notes?: string | null;
+}): Promise<string> {
+    try {
+        const response = await fetch('/api/categorize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                transactionType: input.transactionType,
+                description: input.description || '',
+                notes: input.notes || ''
+            })
+        });
+
+        if (!response.ok) return '';
+        const data = await response.json();
+        return data.category || '';
+    } catch {
+        return '';
+    }
 }
 
 function parseAmount(lines: string[]) {

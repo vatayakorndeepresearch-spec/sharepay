@@ -8,14 +8,18 @@
         Image as ImageIcon,
         Loader2,
         ScanLine,
+        Sparkles,
         Trash2,
     } from "lucide-svelte";
+    import { fade } from "svelte/transition";
     import { getOCRWorker, terminateOCRWorker } from "$lib/stores/ocrStore";
     import { preprocessImage } from "$lib/utils/imageProcessor";
     import {
         extractExpenseData,
         expenseCategories,
         incomeCategories,
+        aiCategorize,
+        inferCategoryFromText,
     } from "$lib/utils/expenseForm";
 
     export let data;
@@ -23,9 +27,49 @@
 
     let loading = false;
     let scanning = false;
+    let aiCategorizing = false;
     let previewUrls: string[] = [];
     let highlightedFields: string[] = [];
     let resetHighlightTimer: ReturnType<typeof setTimeout> | null = null;
+    let aiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function triggerAICategorize() {
+        // Always clear pending AI timer first to prevent stale responses
+        if (aiDebounceTimer) clearTimeout(aiDebounceTimer);
+        aiDebounceTimer = null;
+
+        if (category && category !== "custom" && category !== "") return;
+        if (!notes && !description) return;
+
+        // Try local keyword matching first (instant, no API call needed)
+        const localMatch = inferCategoryFromText(transactionType, description, notes);
+        if (localMatch) {
+            category = localMatch;
+            isCustomCategory = false;
+            flashHighlights(["category"]);
+            return;
+        }
+
+        // Fall back to AI
+        aiDebounceTimer = setTimeout(async () => {
+            aiCategorizing = true;
+            const snapshot = { description, notes, transactionType };
+            try {
+                const result = await aiCategorize({
+                    transactionType: snapshot.transactionType,
+                    description: snapshot.description,
+                    notes: snapshot.notes,
+                });
+                if (result && (!category || category === "")) {
+                    category = result;
+                    isCustomCategory = false;
+                    flashHighlights(["category"]);
+                }
+            } finally {
+                aiCategorizing = false;
+            }
+        }, 800);
+    }
 
     let transactionType: "expense" | "income" = data.expense.transaction_type || "expense";
     let amount = data.expense.amount;
@@ -77,6 +121,12 @@
             }
 
             flashHighlights(extracted.highlightedFields);
+
+            if (extracted.notes || extracted.description) {
+                category = "";
+                isCustomCategory = false;
+                triggerAICategorize();
+            }
         } catch (error) {
             console.error("OCR Error:", error);
         } finally {
@@ -259,6 +309,7 @@
                         type="text"
                         required
                         bind:value={description}
+                        on:input={triggerAICategorize}
                         class={`field-input ${isHighlighted("description") ? "border-indigo-300 bg-indigo-50" : ""}`}
                     />
                 </div>
@@ -285,11 +336,19 @@
                 </div>
 
                 <div>
-                    <label class="field-label" for="category-select">หมวดหมู่</label>
+                    <div class="flex items-center justify-between">
+                        <label class="field-label mb-0" for="category-select">หมวดหมู่</label>
+                        {#if aiCategorizing}
+                            <div class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600" in:fade>
+                                <Sparkles size={12} class="animate-pulse" />
+                                AI กำลังวิเคราะห์...
+                            </div>
+                        {/if}
+                    </div>
                     <select
                         id="category-select"
                         bind:value={category}
-                        class="field-input"
+                        class={`field-input mt-1 ${isHighlighted("category") ? "border-indigo-300 bg-indigo-50" : ""}`}
                         on:change={(event) => {
                             const value = (event.currentTarget as HTMLSelectElement).value;
                             if (value === "custom") {
@@ -323,7 +382,9 @@
                         id="notes"
                         name="notes"
                         bind:value={notes}
+                        on:input={triggerAICategorize}
                         class={`field-input min-h-[80px] ${isHighlighted("notes") ? "border-indigo-300 bg-indigo-50" : ""}`}
+                        placeholder="เช่น memo หรือ context เพิ่มเติม — AI จะช่วยเลือกหมวดหมู่อัตโนมัติ"
                     ></textarea>
                 </div>
 
