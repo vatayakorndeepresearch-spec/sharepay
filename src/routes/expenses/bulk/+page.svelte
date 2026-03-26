@@ -2,11 +2,14 @@
     import { enhance } from "$app/forms";
     import { onDestroy } from "svelte";
     import {
+        ArrowDownLeft,
+        ArrowUpRight,
         CheckCircle2,
         ChevronDown,
         ChevronLeft,
         Loader2,
         ScanLine,
+        Sparkles,
         Trash2,
         Upload,
         X,
@@ -17,11 +20,16 @@
     import {
         extractExpenseData,
         expenseCategories,
+        incomeCategories,
+        inferCategoryFromText,
+        aiCategorize,
         getTodayLocalDate,
     } from "$lib/utils/expenseForm";
 
     export let data;
     export let form;
+
+    type TransactionType = "expense" | "income";
 
     type ReviewItem = {
         fileIndex: number;
@@ -34,9 +42,10 @@
         category: string;
         projectId: string;
         paidBy: string;
-        transactionType: "expense";
+        transactionType: TransactionType;
         isReimbursed: boolean;
         expanded: boolean;
+        aiCategorizing: boolean;
     };
 
     let loading = false;
@@ -47,6 +56,28 @@
 
     const defaultProject = data.projects.find((project) => project.name === "กองกลาง") || data.projects[0];
     const defaultProjectId = defaultProject?.id || "";
+
+    function getCategories(type: TransactionType) {
+        return type === "income" ? [...incomeCategories] : [...expenseCategories];
+    }
+
+    async function autoCategory(item: ReviewItem): Promise<string> {
+        // Try keyword matching first
+        const localMatch = inferCategoryFromText(item.transactionType, item.description, item.notes);
+        if (localMatch) return localMatch;
+
+        // Fall back to AI
+        try {
+            const result = await aiCategorize({
+                transactionType: item.transactionType,
+                description: item.description,
+                notes: item.notes,
+            });
+            return result || "";
+        } catch {
+            return "";
+        }
+    }
 
     async function processFiles(files: FileList) {
         isProcessing = true;
@@ -73,6 +104,7 @@
                 transactionType: "expense",
                 isReimbursed: false,
                 expanded: i === 0 && items.length === 0,
+                aiCategorizing: false,
             };
 
             items = [...items, initialItem];
@@ -93,13 +125,28 @@
                               date: extracted.date,
                               notes: extracted.notes,
                               description: extracted.description || item.description,
+                              category: "",
+                              aiCategorizing: !!(extracted.notes || extracted.description),
                           }
                         : item
                 );
+
+                // Auto-categorize after OCR
+                if (extracted.notes || extracted.description) {
+                    const updatedItem = items.find((i) => i.fileIndex === fileIndex);
+                    if (updatedItem) {
+                        const suggestedCategory = await autoCategory(updatedItem);
+                        items = items.map((item) =>
+                            item.fileIndex === fileIndex
+                                ? { ...item, category: suggestedCategory, aiCategorizing: false }
+                                : item
+                        );
+                    }
+                }
             } catch (error) {
                 console.error("OCR Error:", error);
                 items = items.map((item) =>
-                    item.fileIndex === fileIndex ? { ...item, status: "error", expanded: true } : item
+                    item.fileIndex === fileIndex ? { ...item, status: "error", expanded: true, aiCategorizing: false } : item
                 );
             }
         }
@@ -122,6 +169,25 @@
     function toggleExpanded(fileIndex: number) {
         items = items.map((item) =>
             item.fileIndex === fileIndex ? { ...item, expanded: !item.expanded } : item
+        );
+    }
+
+    function updateItemField(fileIndex: number, field: keyof ReviewItem, value: unknown) {
+        items = items.map((item) =>
+            item.fileIndex === fileIndex ? { ...item, [field]: value } : item
+        );
+    }
+
+    async function triggerItemAICategory(fileIndex: number) {
+        const item = items.find((i) => i.fileIndex === fileIndex);
+        if (!item || !item.description && !item.notes) return;
+
+        updateItemField(fileIndex, "aiCategorizing", true);
+        const suggested = await autoCategory(item);
+        items = items.map((i) =>
+            i.fileIndex === fileIndex
+                ? { ...i, category: suggested || i.category, aiCategorizing: false }
+                : i
         );
     }
 
@@ -273,103 +339,165 @@
 
                             <div class="mt-2 flex flex-wrap gap-1.5 text-xs text-slate-500">
                                 <span class="rounded-md bg-slate-100 px-2 py-0.5">{item.date}</span>
-                                <span class="rounded-md bg-slate-100 px-2 py-0.5">{item.category || "ไม่มีหมวด"}</span>
+                                {#if item.aiCategorizing}
+                                    <span class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-indigo-600">
+                                        <Sparkles size={10} class="animate-pulse" />
+                                        AI วิเคราะห์...
+                                    </span>
+                                {:else}
+                                    <span class="rounded-md bg-slate-100 px-2 py-0.5">{item.category || "ไม่มีหมวด"}</span>
+                                {/if}
+                                <span class={`rounded-md px-2 py-0.5 ${item.transactionType === "income" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100"}`}>
+                                    {item.transactionType === "income" ? "รายรับ" : "รายจ่าย"}
+                                </span>
                             </div>
                         </div>
                     </div>
 
-                    <input type="hidden" name={`item_${index}_transaction_type`} value={item.transactionType} />
                     <input type="hidden" name={`item_${index}_paid_by`} value={item.paidBy || ""} />
-                    <input type="hidden" name={`item_${index}_notes`} value={item.notes} />
                     <input type="hidden" name={`item_${index}_is_reimbursed`} value={item.isReimbursed ? "true" : "false"} />
                     <input type="hidden" name={`item_${index}_amount`} value={item.amount || ""} />
                     <input type="hidden" name={`item_${index}_date`} value={item.date} />
                     <input type="hidden" name={`item_${index}_description`} value={item.description} />
                     <input type="hidden" name={`item_${index}_category`} value={item.category} />
                     <input type="hidden" name={`item_${index}_project_id`} value={item.projectId} />
+                    <input type="hidden" name={`item_${index}_transaction_type`} value={item.transactionType} />
+                    <input type="hidden" name={`item_${index}_notes`} value={item.notes} />
 
                     {#if item.expanded}
-                        <div class="border-t border-slate-100 bg-slate-50 p-3">
-                            <div class="grid gap-3 md:grid-cols-2">
-                                <div>
-                                    <div class="field-label">จำนวนเงิน</div>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        name={`item_${index}_amount`}
-                                        bind:value={item.amount}
-                                        class="field-input"
-                                        placeholder="0.00"
-                                    />
-                                </div>
-
-                                <div>
-                                    <div class="field-label">วันที่</div>
-                                    <input
-                                        type="date"
-                                        name={`item_${index}_date`}
-                                        bind:value={item.date}
-                                        class="field-input"
-                                    />
-                                </div>
-
-                                <div class="md:col-span-2">
-                                    <div class="field-label">รายละเอียด</div>
-                                    <input
-                                        type="text"
-                                        name={`item_${index}_description`}
-                                        bind:value={item.description}
-                                        class="field-input"
-                                        placeholder="อธิบายรายการนี้"
-                                    />
-                                </div>
-
-                                <div>
-                                    <div class="field-label">หมวดหมู่</div>
-                                    <select
-                                        name={`item_${index}_category`}
-                                        bind:value={item.category}
-                                        class="field-input"
-                                    >
-                                        <option value="">เลือกหมวดหมู่</option>
-                                        {#each expenseCategories as category}
-                                            <option value={category}>{category}</option>
-                                        {/each}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <div class="field-label">โปรเจค</div>
-                                    <select
-                                        name={`item_${index}_project_id`}
-                                        bind:value={item.projectId}
-                                        class="field-input"
-                                    >
-                                        {#each data.projects as project}
-                                            <option value={project.id}>{project.name}</option>
-                                        {/each}
-                                    </select>
-                                </div>
-
-                                <div class="md:col-span-2">
+                        <div class="border-t border-slate-100 bg-slate-50 p-3" in:fly={{ y: -8, duration: 150 }}>
+                            <div class="space-y-3">
+                                <!-- Transaction type toggle -->
+                                <div class="grid grid-cols-2 gap-1.5 rounded-xl border border-slate-200 bg-white p-1.5">
                                     <button
                                         type="button"
-                                        class={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
-                                            item.isReimbursed
-                                                ? "bg-emerald-50 text-emerald-700"
-                                                : "bg-white border border-slate-200 text-slate-600"
+                                        class={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                                            item.transactionType === "expense" ? "bg-slate-900 text-white" : "text-slate-400"
                                         }`}
-                                        on:click={() => {
-                                            items = items.map((entry) =>
-                                                entry.fileIndex === item.fileIndex
-                                                    ? { ...entry, isReimbursed: !entry.isReimbursed }
-                                                    : entry
-                                            );
-                                        }}
+                                        on:click={() => updateItemField(item.fileIndex, "transactionType", "expense")}
                                     >
-                                        <CheckCircle2 size={16} />
-                                        {item.isReimbursed ? "เคลียร์แล้ว" : "ยังไม่เคลียร์"}
+                                        <ArrowUpRight size={13} />
+                                        รายจ่าย
                                     </button>
+                                    <button
+                                        type="button"
+                                        class={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                                            item.transactionType === "income" ? "bg-emerald-600 text-white" : "text-slate-400"
+                                        }`}
+                                        on:click={() => updateItemField(item.fileIndex, "transactionType", "income")}
+                                    >
+                                        <ArrowDownLeft size={13} />
+                                        รายรับ
+                                    </button>
+                                </div>
+
+                                <div class="grid gap-3 md:grid-cols-2">
+                                    <div>
+                                        <div class="field-label">จำนวนเงิน</div>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            bind:value={item.amount}
+                                            class="field-input"
+                                            placeholder="0.00"
+                                            on:change={() => updateItemField(item.fileIndex, "amount", item.amount)}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <div class="field-label">วันที่</div>
+                                        <input
+                                            type="date"
+                                            bind:value={item.date}
+                                            class="field-input"
+                                            on:change={() => updateItemField(item.fileIndex, "date", item.date)}
+                                        />
+                                    </div>
+
+                                    <div class="md:col-span-2">
+                                        <div class="field-label">รายละเอียด</div>
+                                        <input
+                                            type="text"
+                                            bind:value={item.description}
+                                            class="field-input"
+                                            placeholder="อธิบายรายการนี้"
+                                            on:input={() => {
+                                                updateItemField(item.fileIndex, "description", item.description);
+                                                triggerItemAICategory(item.fileIndex);
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <div class="flex items-center justify-between">
+                                            <div class="field-label mb-0">หมวดหมู่</div>
+                                            {#if item.aiCategorizing}
+                                                <div class="inline-flex items-center gap-1 text-xs font-medium text-indigo-600" in:fade>
+                                                    <Sparkles size={10} class="animate-pulse" />
+                                                    AI วิเคราะห์...
+                                                </div>
+                                            {/if}
+                                        </div>
+                                        <select
+                                            bind:value={item.category}
+                                            class="field-input mt-1"
+                                            on:change={() => updateItemField(item.fileIndex, "category", item.category)}
+                                        >
+                                            <option value="">เลือกหมวดหมู่</option>
+                                            {#each getCategories(item.transactionType) as cat}
+                                                <option value={cat}>{cat}</option>
+                                            {/each}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <div class="field-label">โปรเจค</div>
+                                        <select
+                                            bind:value={item.projectId}
+                                            class="field-input"
+                                            on:change={() => updateItemField(item.fileIndex, "projectId", item.projectId)}
+                                        >
+                                            {#each data.projects as project}
+                                                <option value={project.id}>{project.name}</option>
+                                            {/each}
+                                        </select>
+                                    </div>
+
+                                    <div class="md:col-span-2">
+                                        <div class="field-label">หมายเหตุ (ไม่บังคับ)</div>
+                                        <textarea
+                                            bind:value={item.notes}
+                                            class="field-input min-h-[70px]"
+                                            placeholder="เช่น memo หรือ context เพิ่มเติม — AI จะช่วยเลือกหมวดหมู่อัตโนมัติ"
+                                            on:input={() => {
+                                                updateItemField(item.fileIndex, "notes", item.notes);
+                                                triggerItemAICategory(item.fileIndex);
+                                            }}
+                                        ></textarea>
+                                    </div>
+
+                                    {#if item.transactionType === "expense"}
+                                        <div class="md:col-span-2">
+                                            <button
+                                                type="button"
+                                                class={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                    item.isReimbursed
+                                                        ? "bg-emerald-50 text-emerald-700"
+                                                        : "bg-white border border-slate-200 text-slate-600"
+                                                }`}
+                                                on:click={() => {
+                                                    items = items.map((entry) =>
+                                                        entry.fileIndex === item.fileIndex
+                                                            ? { ...entry, isReimbursed: !entry.isReimbursed }
+                                                            : entry
+                                                    );
+                                                }}
+                                            >
+                                                <CheckCircle2 size={16} />
+                                                {item.isReimbursed ? "เคลียร์แล้ว" : "ยังไม่เคลียร์"}
+                                            </button>
+                                        </div>
+                                    {/if}
                                 </div>
                             </div>
                         </div>
