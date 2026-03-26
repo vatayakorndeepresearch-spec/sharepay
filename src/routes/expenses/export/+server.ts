@@ -1,9 +1,30 @@
 import * as XLSX from 'xlsx';
 
+function escapeCsvField(value: string): string {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+        return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+}
+
+function toCsv(rows: Record<string, unknown>[]): string {
+    if (rows.length === 0) return '';
+    const headers = Object.keys(rows[0]);
+    const lines = [
+        headers.map(h => escapeCsvField(h)).join(','),
+        ...rows.map(row =>
+            headers.map(h => escapeCsvField(String(row[h] ?? ''))).join(',')
+        )
+    ];
+    return '\uFEFF' + lines.join('\r\n');
+}
+
 export async function GET({ url, locals: { supabase } }) {
     const projectId = url.searchParams.get('project');
     const status = url.searchParams.get('status');
     const type = url.searchParams.get('type');
+    const month = url.searchParams.get('month');
+    const format = url.searchParams.get('format') || 'xlsx';
 
     let query = supabase
         .from('expenses')
@@ -30,6 +51,15 @@ export async function GET({ url, locals: { supabase } }) {
         }
     }
 
+    if (month && month !== 'all') {
+        const [y, m] = month.split('-').map(Number);
+        const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+        const nextM = m === 12 ? 1 : m + 1;
+        const nextY = m === 12 ? y + 1 : y;
+        const endDate = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+        query = query.gte('paid_at', startDate).lt('paid_at', endDate);
+    }
+
     const { data: expenses, error } = await query;
 
     if (error) {
@@ -49,6 +79,18 @@ export async function GET({ url, locals: { supabase } }) {
         'Status': e.transaction_type === 'income' ? '-' : (e.is_reimbursed ? 'Cleared' : 'Waiting')
     }));
 
+    const filename = month && month !== 'all' ? `expenses-${month}` : 'expenses';
+
+    if (format === 'csv') {
+        const csv = toCsv(data);
+        return new Response(csv, {
+            headers: {
+                'Content-Type': 'text/csv; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${filename}.csv"`
+            }
+        });
+    }
+
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Expenses");
@@ -58,7 +100,7 @@ export async function GET({ url, locals: { supabase } }) {
     return new Response(buf, {
         headers: {
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition': 'attachment; filename="expenses.xlsx"'
+            'Content-Disposition': `attachment; filename="${filename}.xlsx"`
         }
     });
 }

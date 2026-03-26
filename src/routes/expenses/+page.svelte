@@ -8,6 +8,7 @@
         CheckCircle2,
         ChevronLeft,
         ChevronRight,
+        Download,
         Funnel,
         Receipt,
         Search,
@@ -108,6 +109,15 @@
     $: activeQuickMode = getQuickMode(data.filters);
     $: dateGroups = groupedExpenses(data.expenses);
     $: loadedCount = data.expenses.length;
+    $: exportCsvUrl = (() => {
+        const params = new URLSearchParams();
+        params.set('format', 'csv');
+        if (data.filters.project !== 'all') params.set('project', data.filters.project);
+        if (data.filters.type !== 'all') params.set('type', data.filters.type);
+        if (data.filters.status !== 'all') params.set('status', data.filters.status);
+        if (data.filters.month !== 'all') params.set('month', data.filters.month);
+        return `/expenses/export?${params.toString()}`;
+    })();
     $: selectedProjectName =
         data.filters.project === "all"
             ? "ทุกโปรเจค"
@@ -190,7 +200,19 @@
             <div class="text-sm text-slate-600">
                 <span class="font-semibold">{data.summaryTotals.filteredCount}</span> รายการ · {formatCurrency(data.summaryTotals.filteredAmount)}
             </div>
-            <span class="text-xs font-medium text-slate-400">{selectedProjectName}</span>
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-medium text-slate-400">{selectedProjectName}</span>
+                {#if data.expenses.length > 0}
+                    <a
+                        href={exportCsvUrl}
+                        download
+                        class="flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                        <Download size={12} />
+                        CSV
+                    </a>
+                {/if}
+            </div>
         </div>
 
         <div class="flex flex-wrap gap-1.5">
