@@ -22,7 +22,7 @@ export type SlipExtraction = z.infer<typeof SlipExtractionSchema>;
 
 /** Extraction plus server-side metadata returned by /api/slip-extract. */
 export interface SlipExtractResponse extends SlipExtraction {
-    provider: 'typhoon' | 'openrouter' | 'tesseract-fallback';
+    provider: 'typhoon' | 'openrouter' | 'tesseract-fallback' | 'qr-dedupe';
     model: string | null;
     /** Existing expense id when this trans_ref was already recorded. */
     duplicate_of?: { expense_id: string | null; created_at: string } | null;

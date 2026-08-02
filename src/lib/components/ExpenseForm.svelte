@@ -222,6 +222,9 @@
                 slipNotice = "สลิปนี้เคยถูกบันทึกแล้ว";
             } else if (fields.highlightedFields.length === 0) {
                 slipNotice = "อ่านสลิปไม่สำเร็จ กรอกเองได้เลย";
+            } else if (extraction.confidence === "low" && fields.amount) {
+                slipNotice = "AI ไม่มั่นใจยอดนี้ เทียบกับสลิปก่อนบันทึก";
+                if (!category) triggerAICategorize();
             } else {
                 toasts.success(`เติมให้แล้ว ${fields.highlightedFields.length} ช่อง · ตรวจก่อนบันทึกได้`);
                 if (!category) triggerAICategorize();
