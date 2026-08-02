@@ -394,9 +394,11 @@
     box-shadow: 0 2px 8px rgb(4 50 42 / 0.28);
   }
 
-  /* Money typography: Outfit + tabular figures at three fixed sizes. */
+  /* Money typography: Apple's system face (SF Pro) where it exists — its figures are
+     what people read balances in on iOS — falling back to Outfit elsewhere.
+     Tabular figures at three fixed sizes so columns of amounts stay aligned. */
   .money {
-    font-family: 'Outfit', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Outfit', sans-serif;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
@@ -440,7 +442,9 @@
 
   .field-input-hero {
     @apply w-full rounded-xl border border-border bg-surface-muted px-4 py-3 text-3xl font-bold text-text placeholder:text-muted/60 focus:border-accent focus:ring-4 focus:ring-accent/20 transition;
-    font-family: 'Outfit', sans-serif;
+    /* Matches .money so the amount you type looks like the amount you read back. */
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Outfit', sans-serif;
+    font-variant-numeric: tabular-nums;
   }
 
   /* Amount fields are numeric but should not show desktop spinners over the ฿ mark. */
