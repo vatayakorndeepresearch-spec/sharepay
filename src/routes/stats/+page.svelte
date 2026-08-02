@@ -1,6 +1,6 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import { PieChart, BarChart } from "layerchart";
+    import { onMount } from "svelte";
     import { countUp } from "$lib/actions/countUp";
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import EmptyState from "$lib/components/EmptyState.svelte";
@@ -16,6 +16,13 @@
     } from "lucide-svelte";
 
     export let data;
+
+    // layerchart is ~500 KB — keep it out of the page bundle and off the preload path.
+    let charts: { PieChart: any; BarChart: any } | null = null;
+    onMount(async () => {
+        const m = await import("layerchart");
+        charts = { PieChart: m.PieChart, BarChart: m.BarChart };
+    });
 
     // Fixed slot order — colors follow the category, resolved per-theme in app.css.
     const CHART_COLORS = [1, 2, 3, 4, 5, 6, 7].map((n) => `var(--chart-${n})`);
@@ -170,7 +177,9 @@
                 <span class="text-[11px] text-muted">เฉลี่ย {formatCurrency(data.monthlyAverage)}/เดือน</span>
             </div>
             <div class="relative h-56">
-                <BarChart
+                {#if charts}
+                <svelte:component
+                    this={charts.BarChart}
                     data={monthlyChartData}
                     x="month"
                     y="value"
@@ -207,21 +216,29 @@
                         grid: { class: "stroke-[var(--chart-grid)]" },
                     }}
                 />
+                {:else}
+                    <div class="h-56 animate-pulse rounded-xl bg-surface-muted"></div>
+                {/if}
             </div>
         </section>
 
         <section class="surface-card p-4">
             <h2 class="mb-3 text-sm font-semibold text-text">แบ่งตามหมวดหมู่</h2>
             <div class="relative h-52">
-                <PieChart
-                    data={data.categoryBreakdown}
-                    key="label"
-                    value="value"
-                    cRange={CHART_COLORS}
-                    innerRadius={-24}
-                    cornerRadius={4}
-                    padAngle={0.02}
-                />
+                {#if charts}
+                    <svelte:component
+                        this={charts.PieChart}
+                        data={data.categoryBreakdown}
+                        key="label"
+                        value="value"
+                        cRange={CHART_COLORS}
+                        innerRadius={-24}
+                        cornerRadius={4}
+                        padAngle={0.02}
+                    />
+                {:else}
+                    <div class="mx-auto h-52 w-52 animate-pulse rounded-full bg-surface-muted"></div>
+                {/if}
             </div>
 
             <div class="mt-4 space-y-1.5">
