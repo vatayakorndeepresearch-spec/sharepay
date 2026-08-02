@@ -87,7 +87,7 @@
 
         <button
           type="button"
-          class="-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/25 transition-all hover:bg-accent-hover active:scale-95"
+          class="-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/40 transition-all hover:bg-accent-hover active:scale-95"
           aria-label="บันทึกรายการใหม่"
           aria-expanded={showEntrySheet}
           on:click={() => (showEntrySheet = !showEntrySheet)}

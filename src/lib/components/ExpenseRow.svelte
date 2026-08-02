@@ -19,13 +19,17 @@
     export let showDate = true;
     export let showProject = true;
     export let showChevron = false;
+    /** Renders without its own card chrome, for stacking inside a shared surface-card. */
+    export let flat = false;
 
     $: isIncome = expense.transaction_type === "income";
 </script>
 
 <a
     href={`/expenses/${expense.id}`}
-    class="surface-card flex items-center justify-between gap-3 p-3 transition-colors hover:bg-surface-muted"
+    class={`flex items-center justify-between gap-3 p-3 transition-colors hover:bg-surface-muted ${
+        flat ? "" : "surface-card"
+    }`}
 >
     <div class="flex min-w-0 items-start gap-2.5">
         <div

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
     import { PieChart, BarChart } from "layerchart";
+    import { countUp } from "$lib/actions/countUp";
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import EmptyState from "$lib/components/EmptyState.svelte";
     import {
@@ -39,6 +40,14 @@
         goto(buildUrl(projectId, data.selectedRange));
     }
 
+    // Split into two series so the current (last) month renders in accent
+    // while past months stay muted — layerchart colors per series, not per bar.
+    $: monthlyChartData = data.monthlyExpenses.map((entry, index) => ({
+        ...entry,
+        past: index < data.monthlyExpenses.length - 1 ? entry.value : null,
+        current: index === data.monthlyExpenses.length - 1 ? entry.value : null,
+    }));
+
     $: monthDelta =
         data.previousMonthExpense > 0
             ? Math.round(
@@ -47,7 +56,7 @@
             : null;
 </script>
 
-<div class="page-shell">
+<div class="page-shell enter">
     <header>
         <h1 class="page-title flex items-center gap-2">
             <ChartBar class="text-accent" size={24} />
@@ -88,59 +97,61 @@
     </div>
 
     <section class="grid grid-cols-2 gap-2">
-        <div class="surface-card p-4">
-            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <Wallet size={13} class="text-accent" />
-                เดือนนี้
+        <div class="surface-card surface-card--raised col-span-2 p-5">
+            <div class="kpi-label flex items-center gap-1.5">
+                <Wallet size={12} class="text-accent" />
+                ใช้จ่ายเดือนนี้
             </div>
-            <div class="mt-1 truncate text-xl font-bold text-text font-display">
-                {formatCurrency(data.thisMonthExpense)}
-            </div>
-            {#if monthDelta !== null}
+            <div class="mt-1 flex flex-wrap items-baseline gap-2">
                 <div
-                    class={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium ${
-                        monthDelta > 0 ? "text-pending-on-soft" : "text-income-on-soft"
-                    }`}
+                    class="money money-lg truncate text-text"
+                    use:countUp={{ value: data.thisMonthExpense }}
                 >
-                    <svelte:component this={monthDelta > 0 ? TrendingUp : TrendingDown} size={11} />
-                    {monthDelta > 0 ? "+" : ""}{monthDelta}% จากเดือนก่อน
+                    {formatCurrency(data.thisMonthExpense)}
                 </div>
-            {:else}
-                <div class="mt-0.5 text-[11px] text-muted">ยังไม่มีเดือนก่อนเทียบ</div>
-            {/if}
+                {#if monthDelta !== null}
+                    <span
+                        class={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            monthDelta > 0
+                                ? "bg-pending-soft text-pending-on-soft"
+                                : "bg-income-soft text-income-on-soft"
+                        }`}
+                    >
+                        <svelte:component this={monthDelta > 0 ? TrendingUp : TrendingDown} size={11} />
+                        {monthDelta > 0 ? "+" : ""}{monthDelta}%
+                    </span>
+                {/if}
+            </div>
+            <div class="mt-1 text-[11px] text-muted">
+                {monthDelta !== null
+                    ? `เทียบเดือนก่อน (${formatCurrency(data.previousMonthExpense)})`
+                    : "ยังไม่มีเดือนก่อนเทียบ"}
+            </div>
         </div>
 
-        <div class="surface-card p-4">
-            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <ChartBar size={13} class="text-income" />
-                เฉลี่ยต่อเดือน
+        <div class="surface-card surface-card--flat p-4">
+            <div class="kpi-label flex items-center gap-1.5">
+                <ChartBar size={12} class="text-income" />
+                เฉลี่ย/เดือน
             </div>
-            <div class="mt-1 truncate text-xl font-bold text-text font-display">
+            <div class="money money-md mt-1 truncate text-text">
                 {formatCurrency(data.monthlyAverage)}
             </div>
             <div class="mt-0.5 text-[11px] text-muted">ไม่รวมเดือนปัจจุบัน</div>
         </div>
 
-        <div class="surface-card p-4">
-            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <Hash size={13} class="text-pending" />
-                จำนวนรายการ
+        <div class="surface-card surface-card--flat p-4">
+            <div class="kpi-label flex items-center gap-1.5">
+                <Receipt size={12} class="text-accent" />
+                เฉลี่ย/รายการ
             </div>
-            <div class="mt-1 text-xl font-bold text-text font-display">{data.expenseCount}</div>
-            <div class="mt-0.5 text-[11px] text-muted">
-                รวม {formatCurrency(data.totalExpense)}
-            </div>
-        </div>
-
-        <div class="surface-card p-4">
-            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <Receipt size={13} class="text-accent" />
-                เฉลี่ยต่อรายการ
-            </div>
-            <div class="mt-1 truncate text-xl font-bold text-text font-display">
+            <div class="money money-md mt-1 truncate text-text">
                 {formatCurrency(data.averagePerExpense)}
             </div>
-            <div class="mt-0.5 text-[11px] text-muted">ในช่วงที่เลือก</div>
+            <div class="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+                <Hash size={10} />
+                {data.expenseCount} รายการ · รวม {formatCurrency(data.totalExpense)}
+            </div>
         </div>
     </section>
 
@@ -160,15 +171,21 @@
             </div>
             <div class="relative h-56">
                 <BarChart
-                    data={data.monthlyExpenses}
+                    data={monthlyChartData}
                     x="month"
                     y="value"
                     bandPadding={0.3}
                     series={[
                         {
-                            key: "value",
+                            key: "past",
                             label: "รายจ่าย",
-                            color: "var(--chart-1)",
+                            color: "rgb(var(--border-strong))",
+                            props: { radius: 4, rounded: "top", strokeWidth: 0 },
+                        },
+                        {
+                            key: "current",
+                            label: "เดือนนี้",
+                            color: "rgb(var(--accent))",
                             props: { radius: 4, rounded: "top", strokeWidth: 0 },
                         },
                     ]}
@@ -233,7 +250,7 @@
                 ใครออกเงินเท่าไหร่
             </h2>
             <div class="space-y-3">
-                {#each data.spenderBreakdown as spender (spender.label)}
+                {#each data.spenderBreakdown as spender, spenderIndex (spender.label)}
                     <div>
                         <div class="mb-1 flex items-baseline justify-between gap-2">
                             <span class="min-w-0 flex-1 truncate text-sm font-medium text-soft">
@@ -247,8 +264,8 @@
                         <div class="flex items-center gap-2">
                             <div class="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted">
                                 <div
-                                    class="h-full rounded-full bg-accent"
-                                    style={`width:${Math.max(spender.percent, 2)}%`}
+                                    class="bar-h h-full rounded-full bg-accent"
+                                    style={`width:${Math.max(spender.percent, 2)}%;animation-delay:${300 + spenderIndex * 50}ms`}
                                 ></div>
                             </div>
                             <span class="w-9 shrink-0 text-right text-xs font-medium text-muted">

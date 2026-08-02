@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { countUp } from "$lib/actions/countUp";
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import EmptyState from "$lib/components/EmptyState.svelte";
     import ExpenseRow from "$lib/components/ExpenseRow.svelte";
@@ -20,20 +21,29 @@
         id,
         ...project,
     }));
+    $: totals = projectCards.reduce(
+        (sum, project) => ({
+            income: sum.income + project.income,
+            expense: sum.expense + project.expense,
+        }),
+        { income: 0, expense: 0 }
+    );
 
     // One card, four states — never claim "all clear" when we simply don't know yet.
-    const heroTheme = {
-        you_owe: { card: "bg-pending text-white", icon: Clock3, chip: "bg-white/15" },
-        owed_to_you: { card: "bg-accent text-white", icon: ArrowRight, chip: "bg-white/15" },
-        clear: { card: "bg-income text-white", icon: CheckCircle2, chip: "bg-white/15" },
-        unknown: { card: "bg-surface-muted text-text", icon: LinkIcon, chip: "bg-surface" },
+    // Backgrounds come from .surface-card--hero[data-state] in app.css.
+    const heroIcon = {
+        you_owe: Clock3,
+        owed_to_you: ArrowRight,
+        clear: CheckCircle2,
+        unknown: LinkIcon,
     } as const;
 
-    $: hero = heroTheme[settlement.state] ?? heroTheme.unknown;
-    $: heroMuted = settlement.state === "unknown" ? "text-muted" : "text-white/70";
+    $: heroState = (settlement.state in heroIcon ? settlement.state : "unknown") as keyof typeof heroIcon;
+    $: heroMuted = heroState === "unknown" ? "text-muted" : "text-white/70";
+    $: heroChip = heroState === "unknown" ? "bg-surface" : "bg-white/15";
 </script>
 
-<div class="page-shell">
+<div class="page-shell enter">
     <header class="px-1">
         <p class="text-sm text-muted">ยินดีต้อนรับกลับ</p>
         <h1 class="page-title">
@@ -41,42 +51,67 @@
         </h1>
     </header>
 
-    <section class={`surface-card border-transparent p-5 ${hero.card}`}>
-        <div class={`mb-3 flex items-center gap-1.5 text-xs font-medium ${heroMuted}`}>
-            <svelte:component this={hero.icon} size={12} />
-            สถานะตอนนี้
-        </div>
-
-        <h2 class="text-lg font-bold font-display">{settlement.headline}</h2>
-
-        {#if settlement.amount > 0}
-            <div class={`mt-3 rounded-xl px-4 py-3 ${hero.chip}`}>
-                <p class={`text-xs ${heroMuted}`}>ยอดที่ต้องจัดการ</p>
-                <div class="mt-0.5 text-3xl font-bold font-display">
-                    {formatCurrency(settlement.amount)}
-                </div>
-                {#if settlement.unpaidCount > 0}
-                    <p class={`mt-1 text-xs ${heroMuted}`}>
-                        จาก {settlement.unpaidCount} รายการที่ยังไม่เคลียร์
-                    </p>
-                {/if}
+    <section class="surface-card surface-card--hero p-5" data-state={heroState}>
+        <div class="relative">
+            <div class={`mb-3 flex items-center gap-1.5 text-xs font-medium ${heroMuted}`}>
+                <svelte:component this={heroIcon[heroState]} size={12} />
+                สถานะตอนนี้
             </div>
-        {:else}
-            <p class={`mt-1 text-sm ${heroMuted}`}>{settlement.subline}</p>
-        {/if}
 
-        <a
-            href={settlement.ctaHref}
-            class={`mt-4 inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors ${
-                settlement.state === "unknown"
-                    ? "bg-accent text-white hover:bg-accent-hover"
-                    : "bg-white text-slate-900 hover:bg-white/90"
-            }`}
-        >
-            {settlement.ctaLabel}
-            <ArrowRight size={14} />
-        </a>
+            <h2 class="text-lg font-bold font-display">{settlement.headline}</h2>
+
+            {#if settlement.amount > 0}
+                <div class={`mt-3 rounded-xl px-4 py-3 ${heroChip}`}>
+                    <p class={`text-xs ${heroMuted}`}>ยอดที่ต้องจัดการ</p>
+                    <div class="money money-lg mt-0.5" use:countUp={{ value: settlement.amount }}>
+                        {formatCurrency(settlement.amount)}
+                    </div>
+                    {#if settlement.unpaidCount > 0}
+                        <p class={`mt-1 text-xs ${heroMuted}`}>
+                            จาก {settlement.unpaidCount} รายการที่ยังไม่เคลียร์
+                        </p>
+                    {/if}
+                </div>
+            {:else}
+                <p class={`mt-1 text-sm ${heroMuted}`}>{settlement.subline}</p>
+            {/if}
+
+            <a
+                href={settlement.ctaHref}
+                class={`mt-4 inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+                    heroState === "unknown"
+                        ? "bg-accent text-white hover:bg-accent-hover"
+                        : "bg-white text-accent-on-soft hover:bg-white/90"
+                }`}
+            >
+                {settlement.ctaLabel}
+                <ArrowRight size={14} />
+            </a>
+        </div>
     </section>
+
+    {#if totals.income > 0 || totals.expense > 0}
+        <section class="grid grid-cols-2 gap-2">
+            <div class="surface-card surface-card--flat p-4">
+                <div class="kpi-label flex items-center gap-1.5">
+                    <TrendingUp size={12} class="text-income" />
+                    รายรับรวม
+                </div>
+                <div class="money money-md mt-1 truncate text-income-on-soft">
+                    {formatCurrency(totals.income)}
+                </div>
+            </div>
+            <div class="surface-card surface-card--flat p-4">
+                <div class="kpi-label flex items-center gap-1.5">
+                    <TrendingDown size={12} class="text-muted" />
+                    รายจ่ายรวม
+                </div>
+                <div class="money money-md mt-1 truncate text-text">
+                    {formatCurrency(totals.expense)}
+                </div>
+            </div>
+        </section>
+    {/if}
 
     <section class="space-y-2">
         <h2 class="px-1 text-base font-bold text-text">ภาพรวมโปรเจค</h2>
@@ -153,9 +188,9 @@
                 actionHref="/expenses/new"
             />
         {:else}
-            <div class="grid gap-2">
+            <div class="surface-card divide-y divide-border overflow-hidden">
                 {#each data.expenses as expense (expense.id)}
-                    <ExpenseRow {expense} />
+                    <ExpenseRow {expense} flat />
                 {/each}
             </div>
         {/if}

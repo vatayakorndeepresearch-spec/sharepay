@@ -5,30 +5,39 @@
 @layer base {
   :root {
     /* Surfaces & text */
-    --bg: 248 250 252;
+    --bg: 246 248 247;
     --surface: 255 255 255;
-    --surface-muted: 241 245 249;
-    --surface-sunken: 248 250 252;
-    --border: 226 232 240;
-    --border-strong: 203 213 225;
-    --text: 15 23 42;
-    --text-soft: 71 85 105;
-    --text-muted: 100 116 139;
+    --surface-muted: 241 245 243;
+    --surface-sunken: 246 248 247;
+    --border: 233 238 236;
+    --border-strong: 220 229 225;
+    --text: 14 22 20;
+    --text-soft: 90 107 102;
+    --text-muted: 138 153 148;
 
     /* Semantic accents */
-    --accent: 79 70 229;
-    --accent-hover: 67 56 202;
-    --accent-soft: 238 242 255;
-    --accent-on-soft: 67 56 202;
-    --income: 5 150 105;
-    --income-soft: 236 253 245;
-    --income-on-soft: 4 120 87;
-    --pending: 217 119 6;
-    --pending-soft: 255 251 235;
-    --pending-on-soft: 180 83 9;
-    --danger: 225 29 72;
-    --danger-soft: 255 241 242;
-    --danger-on-soft: 190 18 60;
+    --accent: 13 155 124;
+    --accent-hover: 10 129 104;
+    --accent-soft: 228 244 238;
+    --accent-on-soft: 7 106 85;
+    --income: 20 127 85;
+    --income-soft: 228 244 236;
+    --income-on-soft: 15 102 69;
+    --pending: 162 98 10;
+    --pending-soft: 253 242 227;
+    --pending-on-soft: 126 76 6;
+    --danger: 196 52 75;
+    --danger-soft: 252 233 236;
+    --danger-on-soft: 158 42 61;
+
+    /* Depth & hero (raw CSS values — not routed through Tailwind) */
+    --shadow-1: 0 1px 2px rgb(14 22 20 / 0.04), 0 4px 12px rgb(14 22 20 / 0.05);
+    --shadow-2: 0 2px 6px rgb(14 22 20 / 0.06), 0 12px 28px rgb(14 22 20 / 0.1);
+    --shadow-hero: 0 18px 36px -14px rgb(13 155 124 / 0.45);
+    --hero-owed: linear-gradient(155deg, #13ab8c, #0c8c7f 54%, #0a7180);
+    --hero-clear: linear-gradient(155deg, #23a55f, #14894f 55%, #0d7350);
+    --hero-pending: linear-gradient(155deg, #c98416, #a96a0d 55%, #8a5410);
+    --hero-glow: rgba(255, 255, 255, 0.4);
 
     /* Chart series (hex, not RGB triples — read directly as SVG fills).
        CVD-validated per mode against the surface color; keep order fixed. */
@@ -53,29 +62,37 @@
 
   :root[data-theme="dark"],
   html.dark {
-    --bg: 2 6 23;
-    --surface: 15 23 42;
-    --surface-muted: 30 41 59;
-    --surface-sunken: 2 6 23;
-    --border: 51 65 85;
-    --border-strong: 71 85 105;
-    --text: 241 245 249;
-    --text-soft: 203 213 225;
-    --text-muted: 148 163 184;
+    --bg: 11 18 17;
+    --surface: 18 26 24;
+    --surface-muted: 23 33 31;
+    --surface-sunken: 11 18 17;
+    --border: 30 41 38;
+    --border-strong: 39 51 47;
+    --text: 236 243 240;
+    --text-soft: 147 165 160;
+    --text-muted: 124 140 135;
 
-    --accent: 99 102 241;
-    --accent-hover: 129 140 248;
-    --accent-soft: 30 27 75;
-    --accent-on-soft: 165 180 252;
-    --income: 16 185 129;
-    --income-soft: 6 46 39;
-    --income-on-soft: 110 231 183;
-    --pending: 245 158 11;
-    --pending-soft: 61 40 6;
+    --accent: 45 212 172;
+    --accent-hover: 77 227 191;
+    --accent-soft: 18 49 42;
+    --accent-on-soft: 127 234 208;
+    --income: 74 222 128;
+    --income-soft: 16 48 31;
+    --income-on-soft: 134 239 172;
+    --pending: 251 191 36;
+    --pending-soft: 51 38 12;
     --pending-on-soft: 252 211 77;
-    --danger: 244 63 94;
-    --danger-soft: 62 14 24;
+    --danger: 251 113 133;
+    --danger-soft: 58 22 32;
     --danger-on-soft: 253 164 175;
+
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.35), 0 6px 16px rgb(0 0 0 / 0.35);
+    --shadow-2: 0 2px 8px rgb(0 0 0 / 0.45), 0 16px 32px rgb(0 0 0 / 0.45);
+    --shadow-hero: 0 18px 36px -14px rgb(0 0 0 / 0.6);
+    --hero-owed: linear-gradient(155deg, #10493b, #0c3a38 54%, #0a3140);
+    --hero-clear: linear-gradient(155deg, #124a2e, #0e3d27 55%, #0b3322);
+    --hero-pending: linear-gradient(155deg, #4a340c, #3d2a08 55%, #332208);
+    --hero-glow: rgba(45, 212, 172, 0.34);
 
     --chart-1: #3987e5;
     --chart-2: #d95926;
@@ -89,7 +106,7 @@
 
   body {
     @apply antialiased bg-bg text-text;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', 'Noto Sans Thai', system-ui, -apple-system, sans-serif;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -98,7 +115,7 @@
   }
 
   h1, h2, h3, h4, h5, h6, .font-display {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Outfit', 'Noto Sans Thai', sans-serif;
   }
 
   :where(a, button, [role="button"], summary):focus-visible {
@@ -168,10 +185,90 @@
 
   .surface-card {
     @apply bg-surface rounded-2xl border border-border;
+    box-shadow: var(--shadow-1);
   }
 
   .surface-card-soft {
     @apply bg-surface rounded-2xl border border-border;
+  }
+
+  /* Depth variants: flat for list rows/tiles, raised for the primary KPI. */
+  .surface-card--flat {
+    box-shadow: none;
+  }
+
+  .surface-card--raised {
+    background: linear-gradient(150deg, rgb(var(--surface)), rgb(var(--surface-muted)));
+    box-shadow: var(--shadow-2);
+  }
+
+  /* Settlement hero: gradient per state + slow-drifting glow. */
+  .surface-card--hero {
+    @apply relative overflow-hidden border-transparent text-white;
+    box-shadow: var(--shadow-hero);
+  }
+
+  .surface-card--hero[data-state="you_owe"] {
+    background: var(--hero-pending);
+  }
+
+  .surface-card--hero[data-state="owed_to_you"] {
+    background: var(--hero-owed);
+  }
+
+  .surface-card--hero[data-state="clear"] {
+    background: var(--hero-clear);
+  }
+
+  .surface-card--hero[data-state="unknown"] {
+    @apply border-border bg-surface-muted text-text;
+    box-shadow: var(--shadow-1);
+  }
+
+  .surface-card--hero::before {
+    content: "";
+    position: absolute;
+    inset: -50% -25% auto -25%;
+    height: 300px;
+    background: radial-gradient(55% 55% at 30% 25%, var(--hero-glow), transparent 70%);
+    pointer-events: none;
+    animation: sweep 5.2s ease-in-out infinite alternate;
+  }
+
+  .surface-card--hero[data-state="unknown"]::before {
+    display: none;
+  }
+
+  .surface-card--hero .btn-primary {
+    @apply bg-white text-accent-on-soft hover:bg-white/90;
+    box-shadow: 0 2px 8px rgb(4 50 42 / 0.28);
+  }
+
+  /* Money typography: Outfit + tabular figures at three fixed sizes. */
+  .money {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .money-xl {
+    font-size: 3rem;
+    line-height: 1.05;
+  }
+
+  .money-lg {
+    font-size: 2.5rem;
+    line-height: 1.05;
+  }
+
+  .money-md {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+
+  .kpi-label {
+    @apply text-[11px] font-medium uppercase tracking-wider text-muted;
   }
 
   .section-label,
@@ -188,11 +285,11 @@
   }
 
   .field-input {
-    @apply w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base sm:text-sm text-text placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors;
+    @apply w-full rounded-xl border border-border bg-surface-muted px-3.5 py-2.5 text-base sm:text-sm text-text placeholder:text-muted focus:border-accent focus:ring-4 focus:ring-accent/20 transition;
   }
 
   .field-input-hero {
-    @apply w-full rounded-xl border border-border bg-surface px-4 py-3 text-3xl font-bold text-text placeholder:text-muted/60 focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors;
+    @apply w-full rounded-xl border border-border bg-surface-muted px-4 py-3 text-3xl font-bold text-text placeholder:text-muted/60 focus:border-accent focus:ring-4 focus:ring-accent/20 transition;
     font-family: 'Outfit', sans-serif;
   }
 
@@ -275,6 +372,7 @@
 
   .sticky-action-bar {
     @apply fixed left-0 right-0 z-40 border-t border-border bg-surface/90 pt-3 backdrop-blur-md;
+    box-shadow: 0 -8px 24px -18px rgb(14 22 20 / 0.4);
     bottom: calc(var(--safe-bottom) + var(--nav-h));
     padding-left: calc(var(--gutter) + var(--safe-left));
     padding-right: calc(var(--gutter) + var(--safe-right));
@@ -282,7 +380,9 @@
   }
 
   .btn-primary {
-    @apply relative flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50;
+    @apply relative flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover active:translate-y-px disabled:opacity-50;
+    box-shadow: 0 6px 18px -8px rgb(var(--accent) / 0.55);
+    box-shadow: 0 6px 18px -8px color-mix(in oklab, rgb(var(--accent)) 65%, transparent);
   }
 
   .btn-secondary {
@@ -306,7 +406,8 @@
   }
 
   .sheet-panel {
-    @apply fixed inset-x-0 bottom-0 z-[70] rounded-t-2xl border-t border-border bg-surface pt-4 shadow-lg;
+    @apply fixed inset-x-0 bottom-0 z-[70] rounded-t-[28px] border-t border-border bg-surface pt-4;
+    box-shadow: var(--shadow-2);
     padding-left: calc(1.25rem + var(--safe-left));
     padding-right: calc(1.25rem + var(--safe-right));
     padding-bottom: calc(var(--safe-bottom) + 24px);
@@ -316,8 +417,79 @@
     overscroll-behavior: contain;
   }
 
+  .sheet-panel::before {
+    content: "";
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: -6px auto 10px;
+    border-radius: 999px;
+    background: rgb(var(--border-strong));
+  }
+
+  /* Entrance motion: direct children of .enter fade up with a short stagger.
+     Pure animations, so the global reduced-motion rule disables everything. */
+  .enter > * {
+    animation: fadeUp 280ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+  .enter > *:nth-child(1) { animation-delay: 40ms; }
+  .enter > *:nth-child(2) { animation-delay: 90ms; }
+  .enter > *:nth-child(3) { animation-delay: 140ms; }
+  .enter > *:nth-child(4) { animation-delay: 190ms; }
+  .enter > *:nth-child(n + 5) { animation-delay: 240ms; }
+
+  .bar {
+    transform-origin: bottom;
+    animation: grow 420ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  }
+
+  .bar-h {
+    transform-origin: left;
+    animation: grow-x 420ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  }
+
   .skeleton {
     @apply animate-pulse rounded-lg bg-surface-muted;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes grow {
+  from {
+    transform: scaleY(0.02);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes sweep {
+  from {
+    opacity: 0.25;
+    transform: translate3d(-8%, 0, 0);
+  }
+  to {
+    opacity: 0.55;
+    transform: translate3d(8%, 0, 0);
   }
 }
 
