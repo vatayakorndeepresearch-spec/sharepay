@@ -23,6 +23,7 @@
         incomeCategories,
         inferCategoryFromText,
         isAiCategorizeAvailable,
+        quickParseExpense,
     } from "$lib/utils/expenseForm";
     import { rememberCategory } from "$lib/utils/recentCategories";
 
@@ -139,6 +140,58 @@
         triggerAICategorize();
     }
 
+    let quickText = "";
+    let quickParsing = false;
+
+    async function runQuickParse() {
+        const text = quickText.trim();
+        if (!text || quickParsing) return;
+
+        quickParsing = true;
+        try {
+            const parsed = await quickParseExpense(text);
+            if (!parsed) {
+                toasts.error("แตกข้อความไม่สำเร็จ ลองพิมพ์ใหม่หรือกรอกเองได้เลย");
+                return;
+            }
+
+            markDirty();
+            transactionType = parsed.transaction_type;
+            const filled: string[] = [];
+            if (parsed.amount) {
+                amount = parsed.amount;
+                filled.push("amount");
+            }
+            if (parsed.description) {
+                description = parsed.description;
+                filled.push("description");
+            }
+            if (parsed.date) {
+                paidAt = parsed.date;
+                filled.push("date");
+            }
+            if (parsed.notes) {
+                notes = parsed.notes;
+                filled.push("notes");
+            }
+            if (parsed.category) {
+                category = parsed.category;
+                filled.push("category");
+            }
+
+            if (filled.length === 0) {
+                toasts.error("ไม่พบข้อมูลในข้อความ ลองใส่จำนวนเงินด้วย");
+                return;
+            }
+
+            flashHighlights(filled);
+            quickText = "";
+            toasts.success(`เติมให้แล้ว ${filled.length} ช่อง · ตรวจก่อนบันทึกได้`);
+        } finally {
+            quickParsing = false;
+        }
+    }
+
     function clearPreviews() {
         previewUrls.forEach((url) => URL.revokeObjectURL(url));
         previewUrls = [];
@@ -248,6 +301,44 @@
     }}
     class="space-y-4"
 >
+    {#if mode === "new"}
+        <section class="surface-card p-4">
+            <label class="field-label flex items-center gap-1.5" for="quick_text">
+                <Sparkles size={13} class="text-accent" />
+                พิมพ์เร็ว
+            </label>
+            <div class="flex gap-2">
+                <input
+                    id="quick_text"
+                    type="text"
+                    bind:value={quickText}
+                    on:keydown={(event) => {
+                        if (event.key === "Enter") {
+                            event.preventDefault();
+                            runQuickParse();
+                        }
+                    }}
+                    class="field-input flex-1"
+                    placeholder="เช่น ข้าวเที่ยง 450 หาร 3 คน เมื่อวาน"
+                    disabled={quickParsing}
+                />
+                <button
+                    type="button"
+                    class="btn-secondary shrink-0 !w-auto px-4"
+                    on:click={runQuickParse}
+                    disabled={quickParsing || !quickText.trim()}
+                >
+                    {#if quickParsing}
+                        <Loader2 size={16} class="animate-spin" />
+                    {:else}
+                        เติมให้
+                    {/if}
+                </button>
+            </div>
+            <p class="mt-1.5 text-xs text-muted">AI แตกเป็นจำนวนเงิน รายละเอียด วันที่ และหมวดหมู่ให้อัตโนมัติ</p>
+        </section>
+    {/if}
+
     <section class="surface-card p-1.5">
         <div class="grid grid-cols-2 gap-1.5 rounded-xl bg-surface-muted p-1">
             <label class="cursor-pointer">

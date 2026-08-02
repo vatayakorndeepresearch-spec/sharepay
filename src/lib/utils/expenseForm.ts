@@ -311,6 +311,36 @@ export async function aiCategorize(input: {
     }
 }
 
+export interface QuickParseResult {
+    transaction_type: TransactionType;
+    amount: number | null;
+    description: string;
+    date: string | null;
+    category: string;
+    notes: string;
+}
+
+/** "ข้าวเที่ยง 450 หาร 3 คน" → form fields via /api/quick-parse. Null on any failure. */
+export async function quickParseExpense(text: string): Promise<QuickParseResult | null> {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+
+    try {
+        const response = await fetch('/api/quick-parse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: trimmed })
+        });
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        if (data.disabled || data.error) return null;
+        return data as QuickParseResult;
+    } catch {
+        return null;
+    }
+}
+
 function parseAmount(lines: string[]) {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
