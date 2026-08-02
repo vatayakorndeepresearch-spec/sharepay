@@ -2,17 +2,25 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import QRCode from 'qrcode';
 
-export const load: PageServerLoad = async ({ locals: { supabase } }) => {
-    const { data: factors, error } = await supabase.auth.mfa.listFactors();
+export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
+    const [{ data: factors, error }, { data: projects, error: projectsError }, { currentUser }] =
+        await Promise.all([
+            supabase.auth.mfa.listFactors(),
+            supabase.from('projects').select('id, name, is_active').order('name'),
+            parent()
+        ]);
 
     if (error) {
         console.error('Error listing factors:', error);
-        return { isEnabled: false };
+    }
+    if (projectsError) {
+        console.error('Error fetching projects:', projectsError);
     }
 
-    const verifiedFactors = factors.all.filter(f => f.status === 'verified');
     return {
-        isEnabled: verifiedFactors.length > 0
+        isEnabled: (factors?.all ?? []).some((factor) => factor.status === 'verified'),
+        projects: projects || [],
+        currentUser
     };
 };
 
@@ -88,6 +96,46 @@ export const actions: Actions = {
 
         for (const factor of verifiedFactors) {
             await supabase.auth.mfa.unenroll({ factorId: factor.id });
+        }
+
+        return { success: true };
+    },
+
+    createProject: async ({ request, locals: { supabase } }) => {
+        const formData = await request.formData();
+        const name = (formData.get('name') as string)?.trim();
+
+        if (!name) {
+            return fail(400, { error: 'กรุณาตั้งชื่อโปรเจค' });
+        }
+
+        const { error } = await supabase.from('projects').insert({ name, is_active: true });
+
+        if (error) {
+            console.error('Create project error:', error);
+            return fail(500, { error: 'สร้างโปรเจคไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
+        }
+
+        return { success: true };
+    },
+
+    toggleProject: async ({ request, locals: { supabase } }) => {
+        const formData = await request.formData();
+        const projectId = formData.get('project_id') as string;
+        const isActive = formData.get('is_active') === 'true';
+
+        if (!projectId) {
+            return fail(400, { error: 'ไม่พบโปรเจคที่ต้องการแก้ไข' });
+        }
+
+        const { error } = await supabase
+            .from('projects')
+            .update({ is_active: !isActive })
+            .eq('id', projectId);
+
+        if (error) {
+            console.error('Toggle project error:', error);
+            return fail(500, { error: 'อัปเดตโปรเจคไม่สำเร็จ' });
         }
 
         return { success: true };

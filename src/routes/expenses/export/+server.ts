@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 
+const EXPORT_ROW_LIMIT = 5000;
+
 function escapeCsvField(value: string): string {
     if (value.includes(',') || value.includes('"') || value.includes('\n')) {
         return `"${value.replace(/"/g, '""')}"`;
@@ -24,6 +26,7 @@ export async function GET({ url, locals: { supabase } }) {
     const status = url.searchParams.get('status');
     const type = url.searchParams.get('type');
     const month = url.searchParams.get('month');
+    const q = url.searchParams.get('q')?.trim() || '';
     const format = url.searchParams.get('format') || 'xlsx';
 
     let query = supabase
@@ -31,9 +34,10 @@ export async function GET({ url, locals: { supabase } }) {
         .select(`
             *,
             projects (name),
-            profiles!paid_by (display_name)
+            profiles!expenses_paid_by_fkey (display_name)
         `)
-        .order('paid_at', { ascending: false });
+        .order('paid_at', { ascending: false })
+        .limit(EXPORT_ROW_LIMIT);
 
     if (projectId && projectId !== 'all') {
         query = query.eq('project_id', projectId);
@@ -58,6 +62,14 @@ export async function GET({ url, locals: { supabase } }) {
         const nextY = m === 12 ? y + 1 : y;
         const endDate = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
         query = query.gte('paid_at', startDate).lt('paid_at', endDate);
+    }
+
+    // Must mirror the list page's search so the export matches what the user sees.
+    if (q) {
+        const escaped = q.replace(/[%,()]/g, ' ');
+        query = query.or(
+            `description.ilike.%${escaped}%,notes.ilike.%${escaped}%,category.ilike.%${escaped}%`
+        );
     }
 
     const { data: expenses, error } = await query;

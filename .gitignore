@@ -31,3 +31,6 @@ eval/slips/
 # Golden labels + QR dump contain real names/memos/transaction refs
 eval/golden.jsonl
 eval/qr-scan.json
+
+# Local debug scratch
+debug_*.js

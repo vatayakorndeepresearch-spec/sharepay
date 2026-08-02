@@ -15,6 +15,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
         .select('id, name')
         .eq('is_active', true)
         .order('name');
+    const profilesPromise = supabase
+        .from('profiles')
+        .select('id, display_name')
+        .order('display_name');
     const attachmentsPromise = supabase
         .from('expense_attachments')
         .select('*')
@@ -24,11 +28,13 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
         { currentProfileId, currentUser },
         { data: expense },
         { data: projects },
+        { data: profiles },
         { data: attachments }
     ] = await Promise.all([
         parentPromise,
         expensePromise,
         projectsPromise,
+        profilesPromise,
         attachmentsPromise
     ]);
 
@@ -39,6 +45,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
     return {
         expense: { ...expense, attachments: attachments || [] },
         projects: projects || [],
+        profiles: profiles || [],
         currentProfileId,
         currentUser
     };
@@ -69,8 +76,16 @@ export const actions: Actions = {
             return fail(400, { error: 'กรุณากรอกข้อมูลให้ครบถ้วน และจำนวนเงินต้องมากกว่า 0' });
         }
 
-        const isReimbursed = formData.get('is_reimbursed') === 'on';
-        const updates: any = {
+        // Settlement state is owned by the reimburse/unreimburse actions on the detail page.
+        // Only touch it here when the transaction type itself changes, otherwise editing a
+        // cleared expense would silently reset it back to unpaid.
+        const { data: currentExpense } = await supabase
+            .from('expenses')
+            .select('proof_image_url, transaction_type, is_reimbursed')
+            .eq('id', id)
+            .single();
+
+        const updates: Record<string, unknown> = {
             project_id: projectId,
             transaction_type: transactionType,
             paid_by: paidBy,
@@ -78,9 +93,21 @@ export const actions: Actions = {
             paid_at: paidAt,
             description,
             category,
-            notes,
-            is_reimbursed: transactionType === 'income' ? true : isReimbursed
+            notes
         };
+
+        if (transactionType === 'income' && !currentExpense?.is_reimbursed) {
+            updates.is_reimbursed = true;
+            updates.reimbursed_at = new Date().toISOString();
+            updates.reimbursed_by = paidBy;
+        } else if (
+            transactionType === 'expense' &&
+            currentExpense?.transaction_type === 'income'
+        ) {
+            updates.is_reimbursed = false;
+            updates.reimbursed_at = null;
+            updates.reimbursed_by = null;
+        }
 
         // Handle Multiple File Uploads
         if (files && files.length > 0) {
@@ -117,24 +144,9 @@ export const actions: Actions = {
             }
         }
 
-        // If new files uploaded, update proof_image_url if it was empty (optional logic, but let's keep it simple)
-        // Actually, if we are editing, we might want to replace the main image?
-        // Or just append?
-        // Let's say: If proof_image_url is empty, set it to the first new image.
-        // If not empty, keep it.
-        // But wait, the user might want to change the main image.
-        // For now, let's just append to attachments. The main image is managed separately?
-        // No, let's treat proof_image_url as just "one of the images".
-        // If the user uploads new images, we add them to attachments.
-        // We update proof_image_url only if it's currently null.
-
-        // Check current expense
-        const { data: currentExpense } = await supabase.from('expenses').select('proof_image_url').eq('id', id).single();
-
-        if (uploadedUrls.length > 0) {
-            if (!currentExpense?.proof_image_url) {
-                updates.proof_image_url = uploadedUrls[0];
-            }
+        // proof_image_url is just the cover image; only fill it when the expense has none.
+        if (uploadedUrls.length > 0 && !currentExpense?.proof_image_url) {
+            updates.proof_image_url = uploadedUrls[0];
         }
 
         const { error: updateError } = await supabase
@@ -167,33 +179,52 @@ export const actions: Actions = {
         throw redirect(303, `/expenses/${id}`);
     },
 
-    deleteAttachment: async ({ request, locals: { supabase } }) => {
+    deleteAttachment: async ({ request, params, locals: { supabase } }) => {
+        const { id } = params;
         const formData = await request.formData();
         const attachmentId = formData.get('attachment_id') as string;
-        const expenseId = formData.get('expense_id') as string;
 
         if (!attachmentId) {
-            return fail(400, { error: 'Missing attachment ID' });
+            return fail(400, { error: 'ไม่พบไฟล์ที่ต้องการลบ' });
         }
 
-        const { error } = await supabase
+        const { data: attachment } = await supabase
+            .from('expense_attachments')
+            .select('file_url')
+            .eq('id', attachmentId)
+            .single();
+
+        const { error: deleteError } = await supabase
             .from('expense_attachments')
             .delete()
             .eq('id', attachmentId);
 
-        if (error) {
-            console.error('Delete attachment error:', error);
+        if (deleteError) {
+            console.error('Delete attachment error:', deleteError);
             return fail(500, { error: 'เกิดข้อผิดพลาดในการลบไฟล์ กรุณาลองใหม่อีกครั้ง' });
         }
 
-        // Check if we need to update proof_image_url
-        // If the deleted attachment was the proof_image_url, we should pick another one?
-        // Or just leave it?
-        // Ideally, we should sync them. But for now, let's leave it.
-        // Actually, if we delete an attachment, we should check if it matches proof_image_url.
-        // But we don't have the URL here easily without fetching.
-        // Let's ignore that edge case for now or handle it later if requested.
+        // Keep the cover image in sync: if we just removed it, promote another
+        // attachment (or clear it) so the detail page never renders a dead URL.
+        const { data: expense } = await supabase
+            .from('expenses')
+            .select('proof_image_url')
+            .eq('id', id)
+            .single();
 
-        return { success: true };
+        if (attachment?.file_url && expense?.proof_image_url === attachment.file_url) {
+            const { data: remaining } = await supabase
+                .from('expense_attachments')
+                .select('file_url')
+                .eq('expense_id', id)
+                .limit(1);
+
+            await supabase
+                .from('expenses')
+                .update({ proof_image_url: remaining?.[0]?.file_url ?? null })
+                .eq('id', id);
+        }
+
+        return { success: true, deleted: true };
     }
 };

@@ -96,8 +96,8 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
                 : settlementState === 'owed_to_you'
                   ? `${otherPartyName || 'อีกฝ่าย'} ต้องโอนให้คุณ`
                   : settlementState === 'clear'
-                    ? 'ตอนนี้ไม่มีรายการค้าง'
-                    : 'พร้อมเริ่มบันทึกรายการ',
+                    ? 'เคลียร์ครบแล้ว'
+                    : 'ยังไม่ได้เชื่อมโปรไฟล์',
         subline:
             settlementState === 'you_owe'
                 ? 'เปิดรายการค้างแล้วเคลียร์ยอดจากหน้ารายละเอียดได้ทันที'
@@ -111,11 +111,15 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
                 ? 'เคลียร์ยอดตอนนี้'
                 : settlementState === 'owed_to_you'
                   ? 'ดูรายการค้าง'
-                  : 'บันทึกรายการใหม่',
+                  : settlementState === 'unknown'
+                    ? 'ไปที่ตั้งค่า'
+                    : 'บันทึกรายการใหม่',
         ctaHref:
-            settlementState === 'clear' || settlementState === 'unknown'
-                ? '/expenses/new'
-                : '/expenses?status=unpaid'
+            settlementState === 'unknown'
+                ? '/settings'
+                : settlementState === 'clear'
+                  ? '/expenses/new'
+                  : '/expenses?status=unpaid'
     };
 
     return {

@@ -7,26 +7,25 @@
 --   {"code":500,"error_code":"unexpected_failure",...}
 --
 -- This rewrites the trigger to be resilient:
---   * also stores email (kept in sync with auth.users)
---   * ON CONFLICT (id) updates instead of crashing on an existing profile
+--   * ON CONFLICT (id) does nothing instead of crashing on an existing profile
 --   * any unexpected error is caught and logged, never blocks the login
+--
+-- Note: public.profiles has NO email column on this database, so the trigger
+-- intentionally does not touch email. The app reads only display_name.
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, display_name, email)
+  INSERT INTO public.profiles (id, display_name)
   VALUES (
     new.id,
     COALESCE(
       new.raw_user_meta_data ->> 'full_name',
       new.raw_user_meta_data ->> 'name',
       split_part(new.email, '@', 1)
-    ),
-    new.email
+    )
   )
-  ON CONFLICT (id) DO UPDATE
-    SET email = EXCLUDED.email,
-        display_name = COALESCE(public.profiles.display_name, EXCLUDED.display_name);
+  ON CONFLICT (id) DO NOTHING;
 
   RETURN new;
 EXCEPTION

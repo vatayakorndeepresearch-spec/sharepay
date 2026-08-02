@@ -276,11 +276,21 @@ export function resolveCategory(input: {
     return 'ไม่ระบุหมวดหมู่';
 }
 
+/** Flipped once the server tells us no AI key is configured, so the UI stops
+ *  promising an analysis that will never arrive. */
+let aiCategorizeDisabled = false;
+
+export function isAiCategorizeAvailable() {
+    return !aiCategorizeDisabled;
+}
+
 export async function aiCategorize(input: {
     transactionType: TransactionType;
     description?: string | null;
     notes?: string | null;
 }): Promise<string> {
+    if (aiCategorizeDisabled) return '';
+
     try {
         const response = await fetch('/api/categorize', {
             method: 'POST',
@@ -294,6 +304,7 @@ export async function aiCategorize(input: {
 
         if (!response.ok) return '';
         const data = await response.json();
+        if (data.disabled) aiCategorizeDisabled = true;
         return data.category || '';
     } catch {
         return '';

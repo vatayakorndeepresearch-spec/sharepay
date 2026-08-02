@@ -1,46 +1,50 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import { page } from "$app/stores";
+    import { navigating, page } from "$app/stores";
+    import { onDestroy } from "svelte";
     import { formatCurrency } from "$lib/utils/formatCurrency";
-    import { formatDate } from "$lib/utils/formatDate";
+    import { formatDateGroup, formatMonth } from "$lib/utils/formatDate";
+    import EmptyState from "$lib/components/EmptyState.svelte";
+    import ExpenseRow from "$lib/components/ExpenseRow.svelte";
+    import ExpenseRowSkeleton from "$lib/components/ExpenseRowSkeleton.svelte";
+    import Sheet from "$lib/components/Sheet.svelte";
     import {
         CalendarDays,
-        CheckCircle2,
         ChevronLeft,
         ChevronRight,
         Download,
+        FileSpreadsheet,
         Funnel,
+        Loader2,
         Receipt,
         Search,
         SlidersHorizontal,
-        TrendingDown,
-        TrendingUp,
         X,
     } from "lucide-svelte";
-    import { fade, fly } from "svelte/transition";
 
     export let data;
 
+    type ExpenseRecord = (typeof data.expenses)[number];
+    type QuickMode = "all" | "unpaid" | "paid" | "income" | "expense";
+
     let showAdvancedFilters = false;
     let searchValue = data.filters.q;
-    let searchTimer: ReturnType<typeof setTimeout>;
+    let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-    function onSearchInput(e: Event) {
-        const val = (e.currentTarget as HTMLInputElement).value;
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => updateQuery({ q: val }), 400);
+    // Keep the box in sync when the query changes from anywhere else (chips, reset).
+    $: if (data.filters.q !== searchValue && !searchTimer) {
+        searchValue = data.filters.q;
     }
 
-    type ExpenseRecord = (typeof data.expenses)[number];
-
-    function getProfileName(profile: { display_name?: string } | { display_name?: string }[] | null | undefined) {
-        const value = Array.isArray(profile) ? profile[0] : profile;
-        return value?.display_name || "ไม่ระบุ";
+    function commitSearch(value: string) {
+        searchTimer = null;
+        updateQuery({ q: value });
     }
 
-    function getProjectName(project: { name?: string } | { name?: string }[] | null | undefined) {
-        const value = Array.isArray(project) ? project[0] : project;
-        return value?.name || "ไม่ระบุโปรเจค";
+    function onSearchInput(event: Event) {
+        searchValue = (event.currentTarget as HTMLInputElement).value;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => commitSearch(searchValue), 400);
     }
 
     function updateQuery(next: Record<string, string>, options: { resetPage?: boolean } = {}) {
@@ -61,24 +65,20 @@
             query.delete("page");
         }
 
-        goto(query.size ? `?${query.toString()}` : "/expenses");
+        goto(query.size ? `?${query.toString()}` : "/expenses", { keepFocus: true, noScroll: true });
     }
 
-    function applyQuickFilter(mode: "all" | "unpaid" | "paid" | "income" | "expense") {
+    function applyQuickFilter(mode: QuickMode) {
         if (mode === "all") {
             updateQuery({ status: "all", type: "all" });
-            return;
-        }
-
-        if (mode === "unpaid" || mode === "paid") {
+        } else if (mode === "unpaid" || mode === "paid") {
             updateQuery({ status: mode, type: "expense" });
-            return;
+        } else {
+            updateQuery({ status: "all", type: mode });
         }
-
-        updateQuery({ status: "all", type: mode });
     }
 
-    function getQuickMode(filters: typeof data.filters) {
+    function getQuickMode(filters: typeof data.filters): QuickMode {
         if (filters.status === "unpaid" && filters.type === "expense") return "unpaid";
         if (filters.status === "paid" && filters.type === "expense") return "paid";
         if (filters.type === "income") return "income";
@@ -89,251 +89,241 @@
     function groupedExpenses(expenses: ExpenseRecord[]) {
         const groups = new Map<string, ExpenseRecord[]>();
         for (const expense of expenses) {
-            const key = expense.paid_at;
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key)?.push(expense);
+            if (!groups.has(expense.paid_at)) groups.set(expense.paid_at, []);
+            groups.get(expense.paid_at)?.push(expense);
         }
 
         return Array.from(groups.entries()).map(([date, items]) => ({
             date,
-            label: new Date(date).toLocaleDateString("th-TH", {
-                weekday: "short",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-            }),
+            label: formatDateGroup(date),
+            total: items.reduce(
+                (sum, item) => sum + (item.transaction_type === "income" ? 0 : Number(item.amount)),
+                0
+            ),
             items,
         }));
     }
 
-    $: activeQuickMode = getQuickMode(data.filters);
-    $: dateGroups = groupedExpenses(data.expenses);
-    $: loadedCount = data.expenses.length;
-    $: exportCsvUrl = (() => {
+    function buildExportUrl(format: "csv" | "xlsx", filters: typeof data.filters) {
         const params = new URLSearchParams();
-        params.set('format', 'csv');
-        if (data.filters.project !== 'all') params.set('project', data.filters.project);
-        if (data.filters.type !== 'all') params.set('type', data.filters.type);
-        if (data.filters.status !== 'all') params.set('status', data.filters.status);
-        if (data.filters.month !== 'all') params.set('month', data.filters.month);
+        params.set("format", format);
+        if (filters.project !== "all") params.set("project", filters.project);
+        if (filters.type !== "all") params.set("type", filters.type);
+        if (filters.status !== "all") params.set("status", filters.status);
+        if (filters.month !== "all") params.set("month", filters.month);
+        if (filters.q) params.set("q", filters.q);
         return `/expenses/export?${params.toString()}`;
-    })();
+    }
+
+    const quickFilters: Array<{ mode: QuickMode; label: string; key: keyof typeof data.summaryCounts }> = [
+        { mode: "all", label: "ทั้งหมด", key: "all" },
+        { mode: "unpaid", label: "ค้าง", key: "unpaid" },
+        { mode: "paid", label: "เคลียร์แล้ว", key: "paid" },
+        { mode: "income", label: "รายรับ", key: "income" },
+        { mode: "expense", label: "รายจ่าย", key: "expense" },
+    ];
+
+    // The server now returns one page at a time, so "load more" appends here instead
+    // of re-fetching every previously loaded row.
+    let loadedExpenses: ExpenseRecord[] = data.expenses;
+    let loadedSignature = "";
+
+    function accumulate(page: typeof data) {
+        const signature = JSON.stringify(page.filters);
+        if (signature !== loadedSignature || page.pagination.page === 1) {
+            loadedSignature = signature;
+            loadedExpenses = page.expenses;
+            return loadedExpenses;
+        }
+
+        const seen = new Set(loadedExpenses.map((expense) => expense.id));
+        loadedExpenses = [...loadedExpenses, ...page.expenses.filter((expense) => !seen.has(expense.id))];
+        return loadedExpenses;
+    }
+
+    $: visibleExpenses = accumulate(data);
+    $: activeQuickMode = getQuickMode(data.filters);
+    $: dateGroups = groupedExpenses(visibleExpenses);
+    $: currentMonth = data.filters.month;
+    $: monthLabel = formatMonth(currentMonth);
+    $: exportCsvUrl = buildExportUrl("csv", data.filters);
+    $: exportXlsxUrl = buildExportUrl("xlsx", data.filters);
     $: selectedProjectName =
         data.filters.project === "all"
             ? "ทุกโปรเจค"
             : data.projects.find((project) => project.id === data.filters.project)?.name || "ทุกโปรเจค";
-    $: currentMonth = data.filters.month;
-    $: monthLabel =
-        currentMonth === "all"
-            ? "ทุกเดือน"
-            : new Date(currentMonth + "-15").toLocaleDateString("th-TH", { month: "long", year: "numeric" });
+
+    type FilterChip = { key: string; label: string; clear: Record<string, string> };
+
+    // Chips that show — and let the user undo — every filter that is not the default.
+    function buildActiveChips(filters: typeof data.filters, projectName: string, month: string) {
+        const chips: FilterChip[] = [];
+        if (filters.q) chips.push({ key: "q", label: `ค้นหา: ${filters.q}`, clear: { q: "" } });
+        if (filters.project !== "all") {
+            chips.push({ key: "project", label: `โปรเจค: ${projectName}`, clear: { project: "all" } });
+        }
+        if (filters.month !== "all") {
+            chips.push({ key: "month", label: month, clear: { month: "all" } });
+        }
+        return chips;
+    }
+
+    $: activeFilterChips = buildActiveChips(data.filters, selectedProjectName, monthLabel);
+
+    // Paging keeps the list on screen; changing a filter swaps it for a skeleton.
+    $: isLoadingMore =
+        Boolean($navigating) && Number($navigating?.to?.url.searchParams.get("page") || "1") > 1;
+    $: isLoading = Boolean($navigating) && !isLoadingMore;
 
     function goMonth(direction: -1 | 1) {
-        let y: number, m: number;
-        if (currentMonth === "all") {
-            const now = new Date();
-            y = now.getFullYear();
-            m = now.getMonth() + 1;
-        } else {
-            [y, m] = currentMonth.split("-").map(Number);
-            m += direction;
-            if (m === 0) { y--; m = 12; }
-            if (m === 13) { y++; m = 1; }
+        const [y, m] = currentMonth.split("-").map(Number);
+        let year = y;
+        let month = m + direction;
+        if (month === 0) {
+            year -= 1;
+            month = 12;
         }
-        updateQuery({ month: `${y}-${String(m).padStart(2, "0")}` });
+        if (month === 13) {
+            year += 1;
+            month = 1;
+        }
+        updateQuery({ month: `${year}-${String(month).padStart(2, "0")}` });
     }
+
+    function goCurrentMonth() {
+        const now = new Date();
+        updateQuery({ month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}` });
+    }
+
+    onDestroy(() => {
+        if (searchTimer) clearTimeout(searchTimer);
+    });
 </script>
 
 <div class="page-shell">
-    <header class="flex items-center justify-between px-1">
-        <h1 class="text-2xl font-bold text-slate-900 font-display">รายการทั้งหมด</h1>
-        <button
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500"
-            aria-label="Open advanced filters"
-            on:click={() => (showAdvancedFilters = true)}
-        >
-            <SlidersHorizontal size={16} />
-        </button>
-    </header>
+    <div class="sticky top-0 z-30 -mx-4 space-y-3 bg-bg/95 px-4 pb-3 pt-1 backdrop-blur">
+        <header class="flex items-center justify-between">
+            <h1 class="page-title">รายการทั้งหมด</h1>
+            <button
+                type="button"
+                class="icon-button"
+                aria-label="ตัวกรองเพิ่มเติม"
+                aria-expanded={showAdvancedFilters}
+                on:click={() => (showAdvancedFilters = true)}
+            >
+                <SlidersHorizontal size={16} />
+            </button>
+        </header>
 
-    <div class="relative">
-        <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
-            <Search size={15} />
-        </span>
-        <input
-            type="search"
-            placeholder="ค้นหารายการ..."
-            class="field-input pl-9"
-            value={searchValue}
-            on:input={onSearchInput}
-        />
+        <div class="relative">
+            <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-muted">
+                <Search size={15} />
+            </span>
+            <input
+                type="search"
+                placeholder="ค้นหารายละเอียด หมายเหตุ หรือหมวดหมู่"
+                class="field-input pl-9"
+                value={searchValue}
+                on:input={onSearchInput}
+            />
+        </div>
+
+        <section class="surface-card flex items-center justify-between p-1.5">
+            {#if currentMonth === "all"}
+                <button type="button" class="btn-secondary flex-1 py-2 text-sm" on:click={goCurrentMonth}>
+                    <CalendarDays size={15} />
+                    เลือกเดือน
+                </button>
+            {:else}
+                <button
+                    type="button"
+                    class="flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-muted"
+                    aria-label="เดือนก่อนหน้า"
+                    on:click={() => goMonth(-1)}
+                >
+                    <ChevronLeft size={18} />
+                </button>
+                <button
+                    type="button"
+                    class="rounded-lg px-3 py-2 text-sm font-semibold text-text transition-colors hover:bg-surface-muted"
+                    on:click={() => updateQuery({ month: "all" })}
+                >
+                    {monthLabel}
+                </button>
+                <button
+                    type="button"
+                    class="flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-muted"
+                    aria-label="เดือนถัดไป"
+                    on:click={() => goMonth(1)}
+                >
+                    <ChevronRight size={18} />
+                </button>
+            {/if}
+        </section>
+
+        <div class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5">
+            {#each quickFilters as filter}
+                <button
+                    type="button"
+                    class={`filter-chip shrink-0 ${activeQuickMode === filter.mode ? "filter-chip-active" : ""}`}
+                    aria-pressed={activeQuickMode === filter.mode}
+                    on:click={() => applyQuickFilter(filter.mode)}
+                >
+                    {filter.label}
+                    <span class="filter-chip-count">{data.summaryCounts[filter.key]}</span>
+                </button>
+            {/each}
+        </div>
+
+        {#if activeFilterChips.length > 0}
+            <div class="flex flex-wrap gap-1.5">
+                {#each activeFilterChips as chip (chip.key)}
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-2.5 py-1.5 text-xs font-medium text-accent-on-soft"
+                        on:click={() => updateQuery(chip.clear)}
+                    >
+                        <span class="max-w-[16ch] truncate">{chip.label}</span>
+                        <X size={12} />
+                    </button>
+                {/each}
+            </div>
+        {/if}
     </div>
 
-    <section class="surface-card flex items-center justify-between p-3">
-        <button
-            type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
-            on:click={() => goMonth(-1)}
-        >
-            <ChevronLeft size={18} />
-        </button>
-        <button
-            type="button"
-            class="text-sm font-semibold text-slate-900"
-            on:click={() => updateQuery({ month: "all" })}
-        >
-            {monthLabel}
-        </button>
-        <button
-            type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
-            class:invisible={currentMonth === "all"}
-            on:click={() => goMonth(1)}
-        >
-            <ChevronRight size={18} />
-        </button>
-    </section>
-
-    <section class="surface-card p-4">
-        <div class="mb-3 flex items-center justify-between">
-            <div class="text-sm text-slate-600">
-                <span class="font-semibold">{data.summaryTotals.filteredCount}</span> รายการ · {formatCurrency(data.summaryTotals.filteredAmount)}
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="text-xs font-medium text-slate-400">{selectedProjectName}</span>
-                {#if data.expenses.length > 0}
-                    <a
-                        href={exportCsvUrl}
-                        download
-                        class="flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                    >
-                        <Download size={12} />
-                        CSV
-                    </a>
-                {/if}
-            </div>
+    <section class="surface-card flex items-center justify-between p-4">
+        <div class="text-sm text-soft">
+            <span class="font-semibold text-text">{data.summaryTotals.filteredCount}</span> รายการ
         </div>
-
-        <div class="flex flex-wrap gap-1.5">
-            <button
-                type="button"
-                class={`filter-chip ${activeQuickMode === "all" ? "filter-chip-active" : ""}`}
-                on:click={() => applyQuickFilter("all")}
-            >
-                ทั้งหมด
-                <span class="text-xs text-slate-400">{data.summaryCounts.all}</span>
-            </button>
-            <button
-                type="button"
-                class={`filter-chip ${activeQuickMode === "unpaid" ? "filter-chip-active" : ""}`}
-                on:click={() => applyQuickFilter("unpaid")}
-            >
-                ค้าง
-                <span class="text-xs text-slate-400">{data.summaryCounts.unpaid}</span>
-            </button>
-            <button
-                type="button"
-                class={`filter-chip ${activeQuickMode === "paid" ? "filter-chip-active" : ""}`}
-                on:click={() => applyQuickFilter("paid")}
-            >
-                เคลียร์แล้ว
-                <span class="text-xs text-slate-400">{data.summaryCounts.paid}</span>
-            </button>
-            <button
-                type="button"
-                class={`filter-chip ${activeQuickMode === "income" ? "filter-chip-active" : ""}`}
-                on:click={() => applyQuickFilter("income")}
-            >
-                รายรับ
-                <span class="text-xs text-slate-400">{data.summaryCounts.income}</span>
-            </button>
-            <button
-                type="button"
-                class={`filter-chip ${activeQuickMode === "expense" ? "filter-chip-active" : ""}`}
-                on:click={() => applyQuickFilter("expense")}
-            >
-                รายจ่าย
-                <span class="text-xs text-slate-400">{data.summaryCounts.expense}</span>
-            </button>
+        <div class="text-base font-bold text-text font-display">
+            {formatCurrency(data.summaryTotals.filteredAmount)}
         </div>
     </section>
 
-    {#if data.expenses.length === 0}
-        <section class="surface-card p-6 text-center">
-            <div class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                <Receipt size={22} />
-            </div>
-            <h2 class="text-base font-bold text-slate-900">ไม่พบรายการ</h2>
-            <p class="mt-1 text-sm text-slate-500">ลองเปลี่ยน filter หรือบันทึกรายการใหม่</p>
-            <a href="/expenses/new" class="mt-3 inline-flex rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white">
-                บันทึกรายการใหม่
-            </a>
-        </section>
+    {#if isLoading}
+        <ExpenseRowSkeleton rows={5} />
+    {:else if visibleExpenses.length === 0}
+        <EmptyState
+            icon={Receipt}
+            title="ไม่พบรายการ"
+            description="ลองเปลี่ยนตัวกรอง หรือบันทึกรายการใหม่"
+            actionLabel="บันทึกรายการใหม่"
+            actionHref="/expenses/new"
+        />
     {:else}
         <section class="space-y-4">
-            {#each dateGroups as group}
+            {#each dateGroups as group (group.date)}
                 <div class="space-y-2">
-                    <div class="flex items-center gap-1.5 px-1 text-xs font-medium text-slate-400">
-                        <CalendarDays size={13} />
-                        {group.label}
+                    <div class="flex items-baseline justify-between px-1">
+                        <div class="text-xs font-semibold text-muted">{group.label}</div>
+                        {#if group.total > 0}
+                            <div class="text-xs font-medium text-muted">{formatCurrency(group.total)}</div>
+                        {/if}
                     </div>
 
                     <div class="grid gap-2">
-                        {#each group.items as expense}
-                            <a href={`/expenses/${expense.id}`} class="surface-card flex items-center justify-between gap-3 p-3">
-                                <div class="flex min-w-0 items-start gap-2.5">
-                                    <div
-                                        class={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                                            expense.transaction_type === "income"
-                                                ? "bg-emerald-50 text-emerald-600"
-                                                : "bg-slate-100 text-slate-600"
-                                        }`}
-                                    >
-                                        {#if expense.transaction_type === "income"}
-                                            <TrendingUp size={16} />
-                                        {:else}
-                                            <TrendingDown size={16} />
-                                        {/if}
-                                    </div>
-
-                                    <div class="min-w-0">
-                                        <div class="truncate text-sm font-medium text-slate-900">{expense.description}</div>
-                                        <div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
-                                            <span>{formatDate(expense.paid_at)}</span>
-                                            <span class="text-slate-300">·</span>
-                                            <span>{getProfileName(expense.profiles)}</span>
-                                            <span class="text-slate-300">·</span>
-                                            <span>{getProjectName(expense.projects)}</span>
-                                        </div>
-                                        {#if expense.transaction_type === "expense"}
-                                            <div class="mt-1">
-                                                <span
-                                                    class={`status-chip ${
-                                                        expense.is_reimbursed
-                                                            ? "bg-emerald-50 text-emerald-700"
-                                                            : "bg-amber-50 text-amber-700"
-                                                    }`}
-                                                >
-                                                    <CheckCircle2 size={11} />
-                                                    {expense.is_reimbursed ? "เคลียร์แล้ว" : "ค้าง"}
-                                                </span>
-                                            </div>
-                                        {/if}
-                                    </div>
-                                </div>
-
-                                <div class="shrink-0 text-right">
-                                    <div
-                                        class={`text-sm font-bold font-display ${
-                                            expense.transaction_type === "income" ? "text-emerald-600" : "text-slate-900"
-                                        }`}
-                                    >
-                                        {expense.transaction_type === "income" ? "+" : ""}{formatCurrency(expense.amount)}
-                                    </div>
-                                    <ChevronRight size={14} class="mt-1 ml-auto text-slate-300" />
-                                </div>
-                            </a>
+                        {#each group.items as expense (expense.id)}
+                            <ExpenseRow {expense} showDate={false} showChevron />
                         {/each}
                     </div>
                 </div>
@@ -342,98 +332,95 @@
             {#if data.pagination.hasMore}
                 <button
                     type="button"
-                    class="surface-card w-full rounded-2xl p-3 text-sm font-semibold text-indigo-600"
-                    on:click={() =>
-                        updateQuery({ page: String(data.pagination.page + 1) }, { resetPage: false })}
+                    disabled={isLoadingMore}
+                    class="surface-card flex w-full items-center justify-center gap-2 p-3 text-sm font-semibold text-accent transition-colors hover:bg-surface-muted disabled:opacity-60"
+                    on:click={() => updateQuery({ page: String(data.pagination.page + 1) }, { resetPage: false })}
                 >
-                    โหลดเพิ่ม · แสดงแล้ว {loadedCount} จาก {data.summaryTotals.filteredCount} รายการ
+                    {#if isLoadingMore}
+                        <Loader2 size={15} class="animate-spin" />
+                        กำลังโหลด...
+                    {:else}
+                        โหลดเพิ่ม · แสดงแล้ว {visibleExpenses.length} จาก {data.summaryTotals.filteredCount} รายการ
+                    {/if}
                 </button>
             {/if}
         </section>
     {/if}
 </div>
 
-{#if showAdvancedFilters}
-    <button
-        type="button"
-        class="fixed inset-0 z-[60] bg-black/30"
-        aria-label="Close advanced filters"
-        on:click={() => (showAdvancedFilters = false)}
-        in:fade={{ duration: 150 }}
-        out:fade={{ duration: 100 }}
-    ></button>
-
-    <div class="sheet-panel max-w-md mx-auto" in:fly={{ y: 20, duration: 150 }} out:fly={{ y: 20, duration: 100 }}>
-        <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-lg font-bold text-slate-900">กรองรายการ</h2>
-            <button
-                type="button"
-                class="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
-                aria-label="Close advanced filters"
-                on:click={() => (showAdvancedFilters = false)}
+<Sheet open={showAdvancedFilters} title="กรองรายการ" on:close={() => (showAdvancedFilters = false)}>
+    <div class="space-y-3">
+        <div>
+            <label class="field-label" for="project-filter">โปรเจค</label>
+            <select
+                id="project-filter"
+                class="field-input"
+                data-autofocus
+                value={data.filters.project}
+                on:change={(event) => updateQuery({ project: event.currentTarget.value })}
             >
-                <X size={18} />
-            </button>
+                <option value="all">ทุกโปรเจค</option>
+                {#each data.projects as project (project.id)}
+                    <option value={project.id}>{project.name}</option>
+                {/each}
+            </select>
         </div>
 
-        <div class="space-y-3">
-            <div>
-                <label class="field-label" for="project-filter">โปรเจค</label>
-                <select
-                    id="project-filter"
-                    class="field-input"
-                    value={data.filters.project}
-                    on:change={(event) =>
-                        updateQuery({ project: (event.currentTarget as HTMLSelectElement).value })}
-                >
-                    <option value="all">ทุกโปรเจค</option>
-                    {#each data.projects as project}
-                        <option value={project.id}>{project.name}</option>
-                    {/each}
-                </select>
-            </div>
-
-            <div>
-                <label class="field-label" for="type-filter">ประเภท</label>
-                <select
-                    id="type-filter"
-                    class="field-input"
-                    value={data.filters.type}
-                    on:change={(event) =>
-                        updateQuery({ type: (event.currentTarget as HTMLSelectElement).value })}
-                >
-                    <option value="all">ทั้งหมด</option>
-                    <option value="expense">รายจ่าย</option>
-                    <option value="income">รายรับ</option>
-                </select>
-            </div>
-
-            <div>
-                <label class="field-label" for="status-filter">สถานะ</label>
-                <select
-                    id="status-filter"
-                    class="field-input"
-                    value={data.filters.status}
-                    on:change={(event) =>
-                        updateQuery({ status: (event.currentTarget as HTMLSelectElement).value })}
-                >
-                    <option value="all">ทั้งหมด</option>
-                    <option value="unpaid">ยังไม่เคลียร์</option>
-                    <option value="paid">เคลียร์แล้ว</option>
-                </select>
-            </div>
-
-            <button
-                type="button"
-                class="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-rose-600"
-                on:click={() => {
-                    showAdvancedFilters = false;
-                    goto("/expenses");
-                }}
+        <div>
+            <label class="field-label" for="type-filter">ประเภท</label>
+            <select
+                id="type-filter"
+                class="field-input"
+                value={data.filters.type}
+                on:change={(event) => updateQuery({ type: event.currentTarget.value })}
             >
-                <Funnel size={14} />
-                ล้างตัวกรองทั้งหมด
-            </button>
+                <option value="all">ทั้งหมด</option>
+                <option value="expense">รายจ่าย</option>
+                <option value="income">รายรับ</option>
+            </select>
         </div>
+
+        <div>
+            <label class="field-label" for="status-filter">สถานะ</label>
+            <select
+                id="status-filter"
+                class="field-input"
+                value={data.filters.status}
+                on:change={(event) => updateQuery({ status: event.currentTarget.value })}
+            >
+                <option value="all">ทั้งหมด</option>
+                <option value="unpaid">ยังไม่เคลียร์</option>
+                <option value="paid">เคลียร์แล้ว</option>
+            </select>
+        </div>
+
+        {#if visibleExpenses.length > 0}
+            <div>
+                <div class="field-label">ดาวน์โหลดตามตัวกรองนี้</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <a href={exportCsvUrl} download class="btn-secondary text-sm">
+                        <Download size={14} />
+                        CSV
+                    </a>
+                    <a href={exportXlsxUrl} download class="btn-secondary text-sm">
+                        <FileSpreadsheet size={14} />
+                        Excel
+                    </a>
+                </div>
+            </div>
+        {/if}
+
+        <button
+            type="button"
+            class="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-danger-on-soft"
+            on:click={() => {
+                showAdvancedFilters = false;
+                searchValue = "";
+                goto("/expenses");
+            }}
+        >
+            <Funnel size={14} />
+            ล้างตัวกรองทั้งหมด
+        </button>
     </div>
-{/if}
+</Sheet>

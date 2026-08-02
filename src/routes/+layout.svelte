@@ -1,145 +1,112 @@
 <script lang="ts">
   import "../app.css";
   import { page } from "$app/stores";
-  import {
-    Home,
-    Plus,
-    List,
-    Settings,
-    PieChart,
-    Receipt,
-    ScanLine,
-    X,
-  } from "lucide-svelte";
-  import { fade, fly } from "svelte/transition";
+  import { Home, List, PieChart, Plus, Receipt, ScanLine, Settings } from "lucide-svelte";
+  import Sheet from "$lib/components/Sheet.svelte";
+  import Toaster from "$lib/components/Toaster.svelte";
 
   let showEntrySheet = false;
+
+  const tabs = [
+    { href: "/", label: "ภาพรวม", icon: Home },
+    { href: "/expenses", label: "รายการ", icon: List },
+    { href: "/stats", label: "อินไซต์", icon: PieChart },
+    { href: "/settings", label: "ตั้งค่า", icon: Settings },
+  ];
 
   function isActive(pathname: string, href: string) {
     return pathname === href || (href !== "/" && pathname.startsWith(href));
   }
+
+  $: onAuthScreen =
+    $page.url.pathname.startsWith("/login") || $page.url.pathname.startsWith("/auth");
 </script>
 
-<div class="app-shell pb-20">
-  <main class="max-w-md mx-auto px-4 pt-4 pb-8">
+<div class="app-shell">
+  <main class="mx-auto max-w-md px-4 pt-4">
     <slot />
   </main>
 
-  {#if showEntrySheet}
-    <button
-      type="button"
-      class="fixed inset-0 z-[60] bg-black/30"
-      aria-label="Close entry sheet"
-      on:click={() => (showEntrySheet = false)}
-      in:fade={{ duration: 150 }}
-      out:fade={{ duration: 100 }}
-    ></button>
-
-    <div class="sheet-panel max-w-md mx-auto" in:fly={{ y: 20, duration: 150 }} out:fly={{ y: 20, duration: 100 }}>
-      <div class="mb-3 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-slate-900">บันทึกรายการ</h2>
-        <button
-          type="button"
-          class="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
-          aria-label="Close entry sheet"
-          on:click={() => (showEntrySheet = false)}
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      <div class="grid gap-2">
+  {#if !onAuthScreen}
+    <Sheet open={showEntrySheet} title="บันทึกรายการ" on:close={() => (showEntrySheet = false)}>
+      <div class="grid gap-1">
         <a
           href="/expenses/new"
-          class="flex items-center gap-3 rounded-xl p-3 hover:bg-slate-50 transition-colors"
+          class="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-surface-muted"
+          data-autofocus
           on:click={() => (showEntrySheet = false)}
         >
-          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-on-soft">
             <Receipt size={20} />
           </div>
           <div>
-            <div class="text-sm font-semibold text-slate-900">บันทึกรายการเดียว</div>
-            <p class="text-xs text-slate-500">กรอกเร็ว หรือแนบสลิปให้ OCR อ่าน</p>
+            <div class="text-sm font-semibold text-text">บันทึกรายการเดียว</div>
+            <p class="text-xs text-muted">กรอกเร็ว หรือแนบสลิปให้ OCR อ่าน</p>
           </div>
         </a>
 
         <a
           href="/expenses/bulk"
-          class="flex items-center gap-3 rounded-xl p-3 hover:bg-slate-50 transition-colors"
+          class="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-surface-muted"
           on:click={() => (showEntrySheet = false)}
         >
-          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-income-soft text-income-on-soft">
             <ScanLine size={20} />
           </div>
           <div>
-            <div class="text-sm font-semibold text-slate-900">สแกนหลายสลิป</div>
-            <p class="text-xs text-slate-500">อัปโหลดหลายใบแล้ว review ก่อนบันทึก</p>
+            <div class="text-sm font-semibold text-text">สแกนหลายสลิป</div>
+            <p class="text-xs text-muted">อัปโหลดหลายใบแล้ว review ก่อนบันทึก</p>
           </div>
         </a>
       </div>
-    </div>
-  {/if}
+    </Sheet>
 
-  <nav class="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-sm px-4 pt-2">
-    <div class="max-w-md mx-auto flex justify-between items-end">
-      <a
-        href="/"
-        class={`flex flex-col items-center gap-1 py-1.5 px-3 transition-colors ${
-          isActive($page.url.pathname, "/") ? "text-indigo-600" : "text-slate-400"
-        }`}
-      >
-        <Home size={20} strokeWidth={isActive($page.url.pathname, "/") ? 2.5 : 2} />
-        <span class="text-[10px] font-medium">ภาพรวม</span>
-      </a>
+    <Toaster />
 
-      <a
-        href="/expenses"
-        class={`flex flex-col items-center gap-1 py-1.5 px-3 transition-colors ${
-          isActive($page.url.pathname, "/expenses") ? "text-indigo-600" : "text-slate-400"
-        }`}
-      >
-        <List size={20} strokeWidth={isActive($page.url.pathname, "/expenses") ? 2.5 : 2} />
-        <span class="text-[10px] font-medium">รายการ</span>
-      </a>
+    <nav
+      class="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/95 backdrop-blur-sm"
+      style="padding-bottom: var(--safe-bottom)"
+      aria-label="เมนูหลัก"
+    >
+      <div class="mx-auto flex h-nav max-w-md items-center justify-between px-2">
+        {#each tabs.slice(0, 2) as tab}
+          {@const active = isActive($page.url.pathname, tab.href)}
+          <a
+            href={tab.href}
+            aria-current={active ? "page" : undefined}
+            class={`flex h-full w-16 flex-col items-center justify-center gap-1 rounded-xl transition-colors ${
+              active ? "text-accent" : "text-muted"
+            }`}
+          >
+            <svelte:component this={tab.icon} size={20} strokeWidth={active ? 2.5 : 2} />
+            <span class="text-[10px] font-medium">{tab.label}</span>
+          </a>
+        {/each}
 
-      <div class="relative -mt-6 flex flex-col items-center">
         <button
           type="button"
-          class="z-10 rounded-full bg-indigo-600 p-3 text-white shadow-md transition-all active:scale-95 hover:bg-indigo-700"
-          aria-label="Create new entry"
+          class="-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/25 transition-all hover:bg-accent-hover active:scale-95"
+          aria-label="บันทึกรายการใหม่"
+          aria-expanded={showEntrySheet}
           on:click={() => (showEntrySheet = !showEntrySheet)}
         >
           <Plus size={24} strokeWidth={2.5} />
         </button>
-        <span class="mt-1.5 text-[10px] font-medium text-slate-400">บันทึก</span>
+
+        {#each tabs.slice(2) as tab}
+          {@const active = isActive($page.url.pathname, tab.href)}
+          <a
+            href={tab.href}
+            aria-current={active ? "page" : undefined}
+            class={`flex h-full w-16 flex-col items-center justify-center gap-1 rounded-xl transition-colors ${
+              active ? "text-accent" : "text-muted"
+            }`}
+          >
+            <svelte:component this={tab.icon} size={20} strokeWidth={active ? 2.5 : 2} />
+            <span class="text-[10px] font-medium">{tab.label}</span>
+          </a>
+        {/each}
       </div>
-
-      <a
-        href="/stats"
-        class={`flex flex-col items-center gap-1 py-1.5 px-3 transition-colors ${
-          isActive($page.url.pathname, "/stats") ? "text-indigo-600" : "text-slate-400"
-        }`}
-      >
-        <PieChart size={20} strokeWidth={isActive($page.url.pathname, "/stats") ? 2.5 : 2} />
-        <span class="text-[10px] font-medium">อินไซต์</span>
-      </a>
-
-      <a
-        href="/settings"
-        class={`flex flex-col items-center gap-1 py-1.5 px-3 transition-colors ${
-          isActive($page.url.pathname, "/settings") ? "text-indigo-600" : "text-slate-400"
-        }`}
-      >
-        <Settings size={20} strokeWidth={isActive($page.url.pathname, "/settings") ? 2.5 : 2} />
-        <span class="text-[10px] font-medium">ตั้งค่า</span>
-      </a>
-    </div>
-    <div class="pb-safe"></div>
-  </nav>
+    </nav>
+  {/if}
 </div>
-
-<style>
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 12px);
-  }
-</style>

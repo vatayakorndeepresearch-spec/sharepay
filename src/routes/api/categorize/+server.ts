@@ -6,7 +6,8 @@ import { expenseCategories, incomeCategories } from '$lib/utils/expenseForm';
 export const POST: RequestHandler = async ({ request }) => {
     const apiKey = env.DEEPSEEK_API_KEY;
     if (!apiKey) {
-        return json({ category: '' }, { status: 200 });
+        // Tell the client so it can stop showing an "AI is thinking" indicator.
+        return json({ category: '', disabled: true });
     }
 
     const { notes, description, transactionType } = await request.json();

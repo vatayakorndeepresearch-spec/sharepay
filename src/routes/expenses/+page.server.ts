@@ -21,7 +21,6 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
     const pageParam = Number.parseInt(url.searchParams.get('page') || '1', 10);
     const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
     const scopedProjectId = projectId === 'all' ? null : projectId;
-    const loadCount = page * PAGE_SIZE;
 
     let filteredQuery = supabase
         .from('expenses')
@@ -36,7 +35,10 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
             profiles!expenses_paid_by_fkey (display_name)
         `)
         .order('paid_at', { ascending: false })
-        .range(0, loadCount - 1);
+        // Same-day rows need a stable tiebreaker, otherwise paging can repeat or skip.
+        .order('id', { ascending: false })
+        // Fetch only the requested page; the client appends it to what it already has.
+        .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
     if (scopedProjectId) {
         filteredQuery = filteredQuery.eq('project_id', scopedProjectId);
@@ -51,7 +53,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
         filteredQuery = filteredQuery.eq('is_reimbursed', true);
     }
     if (q) {
-        filteredQuery = filteredQuery.ilike('description', `%${q}%`);
+        // PostgREST `or` uses commas/parens as syntax, so strip them from user input.
+        const escaped = q.replace(/[%,()]/g, ' ');
+        filteredQuery = filteredQuery.or(
+            `description.ilike.%${escaped}%,notes.ilike.%${escaped}%,category.ilike.%${escaped}%`
+        );
     }
     if (month !== 'all') {
         const [y, m] = month.split('-').map(Number);
@@ -124,7 +130,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
         pagination: {
             page,
             pageSize: PAGE_SIZE,
-            hasMore: filteredCount > filteredExpenses.length
+            hasMore: filteredCount > (page - 1) * PAGE_SIZE + filteredExpenses.length
         }
     };
 };

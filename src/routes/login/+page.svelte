@@ -1,25 +1,27 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import { Lock } from "lucide-svelte";
+    import { AlertTriangle, Loader2, Wallet } from "lucide-svelte";
 
     export let form;
     let loading = false;
 </script>
 
-<div class="min-h-screen bg-slate-50 flex flex-col justify-center px-4">
+<div class="flex min-h-screen flex-col justify-center px-4 py-10">
     <div class="mx-auto w-full max-w-sm">
-        <div class="flex justify-center mb-6">
-            <div class="bg-indigo-600 p-3 rounded-xl">
-                <Lock class="text-white" size={28} />
+        <div class="mb-8 text-center">
+            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-white">
+                <Wallet size={28} />
             </div>
+            <h1 class="text-3xl font-bold text-text font-display">SharePay</h1>
+            <p class="mt-1.5 text-sm text-muted">
+                บันทึกค่าใช้จ่ายร่วมกัน สแกนสลิปอัตโนมัติ แล้วเคลียร์ยอดกันให้จบ
+            </p>
         </div>
-        <h2 class="text-center text-2xl font-bold text-slate-900 font-display mb-6">
-            เข้าสู่ระบบ SharePay
-        </h2>
 
         <div class="surface-card p-6">
             {#if form?.error}
-                <div class="rounded-xl bg-rose-50 border border-rose-200 text-rose-600 px-3 py-2.5 text-sm mb-4">
+                <div class="mb-4 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm font-medium text-danger-on-soft">
+                    <AlertTriangle size={16} class="mt-0.5 shrink-0" />
                     {form.error}
                 </div>
             {/if}
@@ -31,19 +33,20 @@
                     loading = true;
                     return async ({ update }) => {
                         loading = false;
-                        update();
+                        await update();
                     };
                 }}
             >
                 <button
                     type="submit"
                     disabled={loading}
-                    class="w-full flex justify-center items-center gap-2.5 py-2.5 px-4 border border-slate-200 rounded-xl bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                    class="flex w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium text-soft transition-colors hover:bg-surface-muted disabled:opacity-50"
                 >
                     {#if loading}
+                        <Loader2 size={16} class="animate-spin" />
                         กำลังเชื่อมต่อ...
                     {:else}
-                        <svg class="h-5 w-5" viewBox="0 0 24 24">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
                             <path
                                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                                 fill="#4285F4"
@@ -61,7 +64,7 @@
                                 fill="#EA4335"
                             />
                         </svg>
-                        Sign in with Google
+                        เข้าสู่ระบบด้วย Google
                     {/if}
                 </button>
             </form>

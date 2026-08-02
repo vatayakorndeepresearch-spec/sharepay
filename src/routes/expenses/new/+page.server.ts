@@ -4,13 +4,16 @@ import { resolveCategory } from '$lib/utils/expenseForm';
 import { recordSlipExtraction } from '$lib/server/slipExtractions';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
-    const [{ data: projects }, { currentProfileId, currentUser }] = await Promise.all([
-        supabase.from('projects').select('id, name').eq('is_active', true).order('name'),
-        parent()
-    ]);
+    const [{ data: projects }, { data: profiles }, { currentProfileId, currentUser }] =
+        await Promise.all([
+            supabase.from('projects').select('id, name').eq('is_active', true).order('name'),
+            supabase.from('profiles').select('id, display_name').order('display_name'),
+            parent()
+        ]);
 
     return {
         projects: projects || [],
+        profiles: profiles || [],
         currentProfileId,
         currentUser
     };

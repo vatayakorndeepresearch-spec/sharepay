@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { enhance } from "$app/forms";
-    import { onDestroy } from "svelte";
+    import { applyAction, enhance } from "$app/forms";
+    import { onDestroy, onMount } from "svelte";
     import {
+        AlertTriangle,
         ArrowDownLeft,
         ArrowUpRight,
         CheckCircle2,
@@ -15,14 +16,19 @@
         X,
     } from "lucide-svelte";
     import { fade, fly, scale } from "svelte/transition";
-    import { terminateOCRWorker } from "$lib/stores/ocrStore";
+    import EmptyState from "$lib/components/EmptyState.svelte";
+    import Sheet from "$lib/components/Sheet.svelte";
+    import { acquireOCRWorker, releaseOCRWorker } from "$lib/stores/ocrStore";
+    import { toasts } from "$lib/stores/toast";
     import { extractFromImage, toFormFields } from "$lib/utils/slipClient";
+    import { formatCurrency } from "$lib/utils/formatCurrency";
     import {
+        aiCategorize,
         expenseCategories,
+        getTodayLocalDate,
         incomeCategories,
         inferCategoryFromText,
-        aiCategorize,
-        getTodayLocalDate,
+        isAiCategorizeAvailable,
     } from "$lib/utils/expenseForm";
 
     export let data;
@@ -52,41 +58,61 @@
     let selectedPreview: string | null = null;
     let items: ReviewItem[] = [];
     let isProcessing = false;
-    let fileStore: Map<number, File> = new Map();
+    let cancelRequested = false;
+    let scanTotal = 0;
+    let scanDone = 0;
+    let showApplyAll = false;
+    let fileStore = new Map<number, File>();
+    let nextFileIndex = 1;
 
     const defaultProject = data.projects.find((project) => project.name === "กองกลาง") || data.projects[0];
     const defaultProjectId = defaultProject?.id || "";
 
+    let bulkProjectId = defaultProjectId;
+    let bulkPaidBy = data.currentProfileId || "";
+    let bulkDate = getTodayLocalDate();
+
     function getCategories(type: TransactionType) {
-        return type === "income" ? [...incomeCategories] : [...expenseCategories];
+        return type === "income" ? incomeCategories : expenseCategories;
+    }
+
+    /** Every field the server rejects, checked here first so one bad slip
+     *  cannot cost the user the whole batch. */
+    function itemProblems(item: ReviewItem) {
+        const problems: string[] = [];
+        if (!item.amount || item.amount <= 0) problems.push("จำนวนเงิน");
+        if (!item.description.trim()) problems.push("รายละเอียด");
+        if (!item.projectId) problems.push("โปรเจค");
+        if (!item.paidBy) problems.push("ผู้จ่าย");
+        return problems;
     }
 
     async function autoCategory(item: ReviewItem): Promise<string> {
-        // Try keyword matching first
         const localMatch = inferCategoryFromText(item.transactionType, item.description, item.notes);
         if (localMatch) return localMatch;
+        if (!isAiCategorizeAvailable()) return "";
 
-        // Fall back to AI
         try {
-            const result = await aiCategorize({
-                transactionType: item.transactionType,
-                description: item.description,
-                notes: item.notes,
-            });
-            return result || "";
+            return (
+                (await aiCategorize({
+                    transactionType: item.transactionType,
+                    description: item.description,
+                    notes: item.notes,
+                })) || ""
+            );
         } catch {
             return "";
         }
+    }
+
+    function patchItem(fileIndex: number, patch: Partial<ReviewItem>) {
+        items = items.map((item) => (item.fileIndex === fileIndex ? { ...item, ...patch } : item));
     }
 
     const CONCURRENCY = 3;
     const BACKOFF_MS = [1000, 4000, 10000];
 
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    function patchItem(fileIndex: number, patch: Partial<ReviewItem>) {
-        items = items.map((item) => (item.fileIndex === fileIndex ? { ...item, ...patch } : item));
-    }
 
     /** Retries only on provider rate limits; any other failure lands on the Tesseract path. */
     async function extractWithRetry(file: File) {
@@ -112,7 +138,7 @@
         try {
             const extraction = await extractWithRetry(file);
             const fields = toFormFields(extraction);
-            const hasText = !!(fields.notes || fields.description);
+            const hasText = Boolean(fields.notes || fields.description);
 
             patchItem(fileIndex, {
                 status: extraction.duplicate_of ? "duplicate" : "ready",
@@ -127,10 +153,10 @@
             });
 
             if (hasText) {
-                const updatedItem = items.find((item) => item.fileIndex === fileIndex);
-                if (updatedItem) {
-                    const suggestedCategory = await autoCategory(updatedItem);
-                    patchItem(fileIndex, { category: suggestedCategory, aiCategorizing: false });
+                const updated = items.find((item) => item.fileIndex === fileIndex);
+                if (updated) {
+                    const suggested = await autoCategory(updated);
+                    patchItem(fileIndex, { category: suggested, aiCategorizing: false });
                 }
             }
         } catch (error) {
@@ -139,15 +165,18 @@
         }
     }
 
-    async function processFiles(files: FileList) {
+    async function processFiles(fileList: FileList) {
+        const files = Array.from(fileList);
         isProcessing = true;
+        cancelRequested = false;
+        scanTotal = files.length;
+        scanDone = 0;
 
         const queued: number[] = [];
         const startedEmpty = items.length === 0;
 
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const fileIndex = Date.now() + i;
+        files.forEach((file, index) => {
+            const fileIndex = nextFileIndex++;
             fileStore.set(fileIndex, file);
             queued.push(fileIndex);
 
@@ -167,151 +196,205 @@
                     paidBy: data.currentProfileId || "",
                     transactionType: "expense",
                     isReimbursed: false,
-                    expanded: startedEmpty && i === 0,
+                    expanded: startedEmpty && index === 0,
                     aiCategorizing: false,
                 },
             ];
-        }
+        });
 
         // Simple promise pool: CONCURRENCY files in flight, one failure never aborts the batch.
         let cursor = 0;
         const runners = Array.from({ length: Math.min(CONCURRENCY, queued.length) }, async () => {
-            while (cursor < queued.length) {
-                const fileIndex = queued[cursor++];
-                await scanItem(fileIndex);
+            while (cursor < queued.length && !cancelRequested) {
+                await scanItem(queued[cursor++]);
+                scanDone += 1;
             }
         });
 
         await Promise.all(runners);
+
         isProcessing = false;
+        if (cancelRequested) {
+            // Files that never started stay in the queue so the user can retry or drop them.
+            toasts.info(`หยุดการอ่านแล้ว · อ่านไปแล้ว ${scanDone}/${scanTotal} ใบ`);
+        }
+        cancelRequested = false;
     }
 
     function handleFileChange(event: Event) {
-        const input = event.target as HTMLInputElement;
-        if (input.files?.length) {
-            processFiles(input.files);
-        }
+        const input = event.currentTarget as HTMLInputElement;
+        if (input.files?.length) processFiles(input.files);
+        input.value = "";
     }
 
     function removeItem(fileIndex: number) {
+        const target = items.find((item) => item.fileIndex === fileIndex);
+        if (target) URL.revokeObjectURL(target.previewUrl);
         fileStore.delete(fileIndex);
         items = items.filter((item) => item.fileIndex !== fileIndex);
     }
 
-    function toggleExpanded(fileIndex: number) {
-        items = items.map((item) =>
-            item.fileIndex === fileIndex ? { ...item, expanded: !item.expanded } : item
-        );
+    function clearAll() {
+        if (!confirm(`ล้างคิวทั้งหมด ${items.length} รายการ ใช่หรือไม่?`)) return;
+        items.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+        items = [];
+        fileStore = new Map();
     }
 
-    function updateItemField(fileIndex: number, field: keyof ReviewItem, value: unknown) {
-        items = items.map((item) =>
-            item.fileIndex === fileIndex ? { ...item, [field]: value } : item
-        );
+    function applyToAll() {
+        items = items.map((item) => ({
+            ...item,
+            projectId: bulkProjectId || item.projectId,
+            paidBy: bulkPaidBy || item.paidBy,
+            date: bulkDate || item.date,
+        }));
+        showApplyAll = false;
+        toasts.success("ใช้ค่ากับทุกใบแล้ว");
     }
 
     async function triggerItemAICategory(fileIndex: number) {
-        const item = items.find((i) => i.fileIndex === fileIndex);
-        if (!item || !item.description && !item.notes) return;
+        const item = items.find((entry) => entry.fileIndex === fileIndex);
+        if (!item || (!item.description && !item.notes) || item.category) return;
 
-        updateItemField(fileIndex, "aiCategorizing", true);
+        patchItem(fileIndex, { aiCategorizing: true });
         const suggested = await autoCategory(item);
-        items = items.map((i) =>
-            i.fileIndex === fileIndex
-                ? { ...i, category: suggested || i.category, aiCategorizing: false }
-                : i
-        );
+        patchItem(fileIndex, { category: suggested || item.category, aiCategorizing: false });
     }
 
-    $: reviewableItems = items;
+    function expandInvalid() {
+        items = items.map((item) => (itemProblems(item).length > 0 ? { ...item, expanded: true } : item));
+    }
+
+    $: invalidCount = items.filter((item) => itemProblems(item).length > 0).length;
+    $: readyCount = items.length - invalidCount;
+    $: totalAmount = items.reduce((sum, item) => sum + (item.amount || 0), 0);
+    $: scanProgress = scanTotal > 0 ? Math.round((scanDone / scanTotal) * 100) : 0;
+
+    onMount(() => acquireOCRWorker());
 
     onDestroy(() => {
-        terminateOCRWorker();
+        cancelRequested = true;
+        items.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+        releaseOCRWorker();
     });
 </script>
 
-<div class="page-shell pb-36">
-    <div class="flex items-center gap-2.5 px-1">
-        <a
-            href="/expenses"
-            class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500"
-        >
+<div class="page-shell page-shell-actions">
+    <div class="flex items-center gap-2.5">
+        <a href="/expenses" class="icon-button" aria-label="กลับไปหน้ารายการ">
             <ChevronLeft size={18} />
         </a>
-        <h1 class="text-xl font-bold text-slate-900 font-display">สแกนหลายสลิป</h1>
+        <h1 class="page-title">สแกนหลายสลิป</h1>
     </div>
 
     {#if form?.error}
-        <div class="surface-card border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
+        <div class="surface-card flex items-start gap-2 border-danger/30 bg-danger-soft p-3 text-sm font-medium text-danger-on-soft">
+            <AlertTriangle size={16} class="mt-0.5 shrink-0" />
             {form.error}
         </div>
     {/if}
 
     <section class="surface-card p-4">
         <label
-            class="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 transition hover:border-indigo-300 hover:bg-indigo-50"
+            class="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border-strong bg-surface-muted px-4 py-5 transition hover:border-accent hover:bg-accent-soft"
         >
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-indigo-600">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-surface text-accent">
                 {#if isProcessing}
-                    <ScanLine size={20} class="animate-spin" />
+                    <ScanLine size={20} class="animate-pulse" />
                 {:else}
                     <Upload size={20} />
                 {/if}
             </div>
             <div>
-                <div class="text-sm font-semibold text-slate-700">เลือกรูปหลายสลิป</div>
-                <p class="text-xs text-slate-500">อัปโหลดแล้ว review ก่อนบันทึก</p>
+                <div class="text-sm font-semibold text-soft">เลือกรูปหลายสลิป</div>
+                <p class="text-xs text-muted">อัปโหลดแล้ว review ก่อนบันทึก</p>
             </div>
-            <input type="file" multiple accept="image/*" class="hidden" on:change={handleFileChange} />
+            <input type="file" multiple accept="image/*" class="sr-only" on:change={handleFileChange} />
         </label>
+
+        {#if isProcessing}
+            <div class="mt-3" in:fade>
+                <div class="mb-1.5 flex items-center justify-between text-xs font-medium">
+                    <span class="text-accent">กำลังอ่าน {Math.min(scanDone + 1, scanTotal)}/{scanTotal}</span>
+                    <button type="button" class="text-danger-on-soft" on:click={() => (cancelRequested = true)}>
+                        หยุด
+                    </button>
+                </div>
+                <div class="h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                    <div class="h-full bg-accent transition-all" style={`width: ${scanProgress}%`}></div>
+                </div>
+            </div>
+        {/if}
     </section>
 
-    {#if reviewableItems.length === 0}
-        <section class="surface-card p-6 text-center">
-            <div class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                <Upload size={22} />
-            </div>
-            <h2 class="text-base font-bold text-slate-900">ยังไม่มีคิวรอตรวจ</h2>
-            <p class="mt-1 text-sm text-slate-500">อัปโหลดสลิปแล้วจะมาอยู่ในคิวด้านล่าง</p>
-        </section>
+    {#if items.length === 0}
+        <EmptyState
+            icon={Upload}
+            title="ยังไม่มีคิวรอตรวจ"
+            description="อัปโหลดสลิปแล้วจะมาอยู่ในคิวด้านล่าง"
+        />
     {:else}
+        <section class="surface-card flex flex-wrap items-center gap-2 p-3">
+            <span class="status-chip status-chip-cleared">พร้อม {readyCount}</span>
+            {#if invalidCount > 0}
+                <button type="button" class="status-chip status-chip-pending" on:click={expandInvalid}>
+                    ต้องแก้ {invalidCount}
+                </button>
+            {/if}
+            <span class="ml-auto text-sm font-bold text-text font-display">{formatCurrency(totalAmount)}</span>
+            <button type="button" class="filter-chip" on:click={() => (showApplyAll = true)}>ตั้งค่าทุกใบ</button>
+        </section>
+
         <form
             method="POST"
             action="?/batchSave"
             enctype="multipart/form-data"
-            use:enhance={({ formData }) => {
+            use:enhance={({ formData, cancel }) => {
+                if (invalidCount > 0) {
+                    cancel();
+                    expandInvalid();
+                    toasts.error(`มี ${invalidCount} รายการยังกรอกไม่ครบ`);
+                    return;
+                }
+
                 loading = true;
-                reviewableItems.forEach((item, index) => {
+                const savedCount = items.length;
+                items.forEach((item, index) => {
                     const file = fileStore.get(item.fileIndex);
-                    if (file) {
-                        formData.append(`item_${index}_file`, file);
-                    }
+                    if (file) formData.append(`item_${index}_file`, file);
                 });
 
-                return async ({ result, update }) => {
+                return async ({ result }) => {
                     loading = false;
                     if (result.type === "redirect") {
-                        window.location.href = result.location;
-                    } else {
-                        await update();
+                        toasts.success(`บันทึก ${savedCount} รายการแล้ว`);
+                        items.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+                        items = [];
+                        fileStore = new Map();
                     }
+                    await applyAction(result);
                 };
             }}
             class="space-y-3"
         >
-            <input type="hidden" name="item_count" value={reviewableItems.length} />
+            <input type="hidden" name="item_count" value={items.length} />
 
-            {#each reviewableItems as item, index}
-                <section class="surface-card overflow-hidden" in:scale>
+            {#each items as item, index (item.fileIndex)}
+                {@const problems = itemProblems(item)}
+                <section
+                    class={`surface-card overflow-hidden ${problems.length > 0 ? "border-pending/50" : ""}`}
+                    in:scale={{ duration: 150 }}
+                >
                     <div class="flex gap-3 p-3">
                         <button
                             type="button"
-                            class="relative h-24 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                            class="relative h-24 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-surface-muted"
+                            aria-label={`ดูสลิปใบที่ ${index + 1}`}
                             on:click={() => (selectedPreview = item.previewUrl)}
                         >
-                            <img src={item.previewUrl} alt="Slip preview" class="h-full w-full object-cover" />
+                            <img src={item.previewUrl} alt="" class="h-full w-full object-cover" />
                             {#if item.status === "scanning"}
-                                <div class="absolute inset-0 flex items-center justify-center bg-indigo-600/40 text-white">
+                                <div class="absolute inset-0 flex items-center justify-center bg-accent/40 text-white">
                                     <Loader2 size={18} class="animate-spin" />
                                 </div>
                             {/if}
@@ -319,20 +402,20 @@
 
                         <div class="min-w-0 flex-1">
                             <div class="flex items-start justify-between gap-2">
-                                <div>
+                                <div class="min-w-0">
                                     <div class="flex items-center gap-2">
-                                        <span class="text-sm font-semibold text-slate-900">#{index + 1}</span>
+                                        <span class="text-sm font-semibold text-text">#{index + 1}</span>
                                         <span
                                             class={`status-chip ${
                                                 item.status === "ready"
-                                                    ? "bg-emerald-50 text-emerald-700"
+                                                    ? "status-chip-cleared"
                                                     : item.status === "error"
-                                                      ? "bg-rose-50 text-rose-700"
+                                                      ? "bg-danger-soft text-danger-on-soft"
                                                       : item.status === "duplicate"
-                                                        ? "bg-amber-50 text-amber-700"
+                                                        ? "status-chip-pending"
                                                         : item.status === "queued"
-                                                          ? "bg-slate-100 text-slate-500"
-                                                          : "bg-indigo-50 text-indigo-700"
+                                                          ? "bg-surface-muted text-muted"
+                                                          : "bg-accent-soft text-accent-on-soft"
                                             }`}
                                         >
                                             {item.status === "ready"
@@ -348,26 +431,27 @@
                                         {#if item.status === "duplicate" && item.duplicateExpenseId}
                                             <a
                                                 href={`/expenses/${item.duplicateExpenseId}`}
-                                                class="text-xs font-semibold text-amber-700 underline"
+                                                class="text-xs font-semibold text-pending-on-soft underline"
                                             >
                                                 ดูรายการเดิม
                                             </a>
                                         {/if}
                                     </div>
-                                    <div class="mt-1 text-xl font-bold text-slate-900 font-display">
-                                        {item.amount ? item.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                                    <div class="mt-1 text-xl font-bold text-text font-display">
+                                        {formatCurrency(item.amount || 0)}
                                     </div>
-                                    <p class="mt-0.5 truncate text-xs text-slate-500">
+                                    <p class="mt-0.5 truncate text-xs text-muted">
                                         {item.description || "ยังไม่มีรายละเอียด"}
                                     </p>
                                 </div>
 
-                                <div class="flex items-center gap-1.5">
+                                <div class="flex shrink-0 items-center gap-1.5">
                                     <button
                                         type="button"
-                                        class="rounded-lg border border-slate-200 bg-white p-2 text-slate-400"
-                                        aria-label="Toggle item details"
-                                        on:click={() => toggleExpanded(item.fileIndex)}
+                                        class="rounded-lg border border-border bg-surface p-2.5 text-muted"
+                                        aria-label="แสดง/ซ่อนรายละเอียด"
+                                        aria-expanded={item.expanded}
+                                        on:click={() => patchItem(item.fileIndex, { expanded: !item.expanded })}
                                     >
                                         <ChevronDown
                                             size={14}
@@ -376,8 +460,8 @@
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-500"
-                                        aria-label="Remove item"
+                                        class="rounded-lg border border-danger/30 bg-danger-soft p-2.5 text-danger-on-soft"
+                                        aria-label="ลบใบนี้ออกจากคิว"
                                         on:click={() => removeItem(item.fileIndex)}
                                     >
                                         <Trash2 size={14} />
@@ -385,26 +469,40 @@
                                 </div>
                             </div>
 
-                            <div class="mt-2 flex flex-wrap gap-1.5 text-xs text-slate-500">
-                                <span class="rounded-md bg-slate-100 px-2 py-0.5">{item.date}</span>
+                            <div class="mt-2 flex flex-wrap gap-1.5 text-xs text-muted">
+                                <span class="rounded-md bg-surface-muted px-2 py-0.5">{item.date}</span>
                                 {#if item.aiCategorizing}
-                                    <span class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-indigo-600">
+                                    <span class="inline-flex items-center gap-1 rounded-md bg-accent-soft px-2 py-0.5 text-accent-on-soft">
                                         <Sparkles size={10} class="animate-pulse" />
                                         AI วิเคราะห์...
                                     </span>
                                 {:else}
-                                    <span class="rounded-md bg-slate-100 px-2 py-0.5">{item.category || "ไม่มีหมวด"}</span>
+                                    <span class="rounded-md bg-surface-muted px-2 py-0.5">
+                                        {item.category || "ไม่มีหมวด"}
+                                    </span>
                                 {/if}
-                                <span class={`rounded-md px-2 py-0.5 ${item.transactionType === "income" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100"}`}>
+                                <span
+                                    class={`rounded-md px-2 py-0.5 ${
+                                        item.transactionType === "income"
+                                            ? "bg-income-soft text-income-on-soft"
+                                            : "bg-surface-muted"
+                                    }`}
+                                >
                                     {item.transactionType === "income" ? "รายรับ" : "รายจ่าย"}
                                 </span>
                             </div>
+
+                            {#if problems.length > 0}
+                                <p class="mt-2 text-xs font-medium text-pending-on-soft">
+                                    ยังขาด: {problems.join(", ")}
+                                </p>
+                            {/if}
                         </div>
                     </div>
 
-                    <input type="hidden" name={`item_${index}_paid_by`} value={item.paidBy || ""} />
+                    <input type="hidden" name={`item_${index}_paid_by`} value={item.paidBy} />
                     <input type="hidden" name={`item_${index}_is_reimbursed`} value={item.isReimbursed ? "true" : "false"} />
-                    <input type="hidden" name={`item_${index}_amount`} value={item.amount || ""} />
+                    <input type="hidden" name={`item_${index}_amount`} value={item.amount ?? ""} />
                     <input type="hidden" name={`item_${index}_date`} value={item.date} />
                     <input type="hidden" name={`item_${index}_description`} value={item.description} />
                     <input type="hidden" name={`item_${index}_category`} value={item.category} />
@@ -413,16 +511,17 @@
                     <input type="hidden" name={`item_${index}_notes`} value={item.notes} />
 
                     {#if item.expanded}
-                        <div class="border-t border-slate-100 bg-slate-50 p-3" in:fly={{ y: -8, duration: 150 }}>
+                        <div class="border-t border-border bg-surface-muted p-3" in:fly={{ y: -8, duration: 150 }}>
                             <div class="space-y-3">
-                                <!-- Transaction type toggle -->
-                                <div class="grid grid-cols-2 gap-1.5 rounded-xl border border-slate-200 bg-white p-1.5">
+                                <div class="grid grid-cols-2 gap-1.5 rounded-xl border border-border bg-surface p-1.5">
                                     <button
                                         type="button"
                                         class={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                                            item.transactionType === "expense" ? "bg-slate-900 text-white" : "text-slate-400"
+                                            item.transactionType === "expense"
+                                                ? "bg-surface-muted text-text ring-1 ring-border"
+                                                : "text-muted"
                                         }`}
-                                        on:click={() => updateItemField(item.fileIndex, "transactionType", "expense")}
+                                        on:click={() => patchItem(item.fileIndex, { transactionType: "expense" })}
                                     >
                                         <ArrowUpRight size={13} />
                                         รายจ่าย
@@ -430,9 +529,11 @@
                                     <button
                                         type="button"
                                         class={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                                            item.transactionType === "income" ? "bg-emerald-600 text-white" : "text-slate-400"
+                                            item.transactionType === "income"
+                                                ? "bg-income-soft text-income-on-soft ring-1 ring-income/30"
+                                                : "text-muted"
                                         }`}
-                                        on:click={() => updateItemField(item.fileIndex, "transactionType", "income")}
+                                        on:click={() => patchItem(item.fileIndex, { transactionType: "income" })}
                                     >
                                         <ArrowDownLeft size={13} />
                                         รายรับ
@@ -441,86 +542,81 @@
 
                                 <div class="grid gap-3 md:grid-cols-2">
                                     <div>
-                                        <div class="field-label">จำนวนเงิน</div>
+                                        <label class="field-label" for={`amount-${item.fileIndex}`}>จำนวนเงิน</label>
                                         <input
+                                            id={`amount-${item.fileIndex}`}
                                             type="number"
+                                            inputmode="decimal"
                                             step="0.01"
+                                            min="0"
                                             bind:value={item.amount}
-                                            class="field-input"
+                                            class="field-input no-spinner"
                                             placeholder="0.00"
-                                            on:change={() => updateItemField(item.fileIndex, "amount", item.amount)}
                                         />
                                     </div>
 
                                     <div>
-                                        <div class="field-label">วันที่</div>
+                                        <label class="field-label" for={`date-${item.fileIndex}`}>วันที่</label>
                                         <input
+                                            id={`date-${item.fileIndex}`}
                                             type="date"
                                             bind:value={item.date}
                                             class="field-input"
-                                            on:change={() => updateItemField(item.fileIndex, "date", item.date)}
                                         />
                                     </div>
 
                                     <div class="md:col-span-2">
-                                        <div class="field-label">รายละเอียด</div>
+                                        <label class="field-label" for={`description-${item.fileIndex}`}>รายละเอียด</label>
                                         <input
+                                            id={`description-${item.fileIndex}`}
                                             type="text"
                                             bind:value={item.description}
                                             class="field-input"
                                             placeholder="อธิบายรายการนี้"
-                                            on:input={() => {
-                                                updateItemField(item.fileIndex, "description", item.description);
-                                                triggerItemAICategory(item.fileIndex);
-                                            }}
+                                            on:change={() => triggerItemAICategory(item.fileIndex)}
                                         />
                                     </div>
 
                                     <div>
-                                        <div class="flex items-center justify-between">
-                                            <div class="field-label mb-0">หมวดหมู่</div>
-                                            {#if item.aiCategorizing}
-                                                <div class="inline-flex items-center gap-1 text-xs font-medium text-indigo-600" in:fade>
-                                                    <Sparkles size={10} class="animate-pulse" />
-                                                    AI วิเคราะห์...
-                                                </div>
-                                            {/if}
-                                        </div>
-                                        <select
-                                            bind:value={item.category}
-                                            class="field-input mt-1"
-                                            on:change={() => updateItemField(item.fileIndex, "category", item.category)}
-                                        >
+                                        <label class="field-label" for={`category-${item.fileIndex}`}>หมวดหมู่</label>
+                                        <select id={`category-${item.fileIndex}`} bind:value={item.category} class="field-input">
                                             <option value="">เลือกหมวดหมู่</option>
-                                            {#each getCategories(item.transactionType) as cat}
-                                                <option value={cat}>{cat}</option>
+                                            {#each getCategories(item.transactionType) as category (category)}
+                                                <option value={category}>{category}</option>
                                             {/each}
                                         </select>
                                     </div>
 
                                     <div>
-                                        <div class="field-label">โปรเจค</div>
-                                        <select
-                                            bind:value={item.projectId}
-                                            class="field-input"
-                                            on:change={() => updateItemField(item.fileIndex, "projectId", item.projectId)}
-                                        >
-                                            {#each data.projects as project}
+                                        <label class="field-label" for={`project-${item.fileIndex}`}>โปรเจค</label>
+                                        <select id={`project-${item.fileIndex}`} bind:value={item.projectId} class="field-input">
+                                            {#each data.projects as project (project.id)}
                                                 <option value={project.id}>{project.name}</option>
                                             {/each}
                                         </select>
                                     </div>
 
+                                    {#if data.profiles.length > 1}
+                                        <div>
+                                            <label class="field-label" for={`paid-by-${item.fileIndex}`}>ผู้จ่าย</label>
+                                            <select id={`paid-by-${item.fileIndex}`} bind:value={item.paidBy} class="field-input">
+                                                {#each data.profiles as profile (profile.id)}
+                                                    <option value={profile.id}>
+                                                        {profile.display_name}{profile.id === data.currentProfileId ? " (คุณ)" : ""}
+                                                    </option>
+                                                {/each}
+                                            </select>
+                                        </div>
+                                    {/if}
+
                                     <div class="md:col-span-2">
-                                        <div class="field-label">หมายเหตุ (ไม่บังคับ)</div>
+                                        <label class="field-label" for={`notes-${item.fileIndex}`}>หมายเหตุ (ไม่บังคับ)</label>
                                         <textarea
+                                            id={`notes-${item.fileIndex}`}
                                             bind:value={item.notes}
                                             class="field-input min-h-[70px]"
-                                            placeholder="เช่น memo หรือ context เพิ่มเติม — AI จะช่วยเลือกหมวดหมู่อัตโนมัติ"
-                                            on:input={() => {
-                                                updateItemField(item.fileIndex, "notes", item.notes);
-                                                triggerItemAICategory(item.fileIndex);
-                                            }}
+                                            placeholder="เช่น memo หรือ context เพิ่มเติม"
+                                            on:change={() => triggerItemAICategory(item.fileIndex)}
                                         ></textarea>
                                     </div>
 
@@ -528,18 +624,13 @@
                                         <div class="md:col-span-2">
                                             <button
                                                 type="button"
-                                                class={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                class={`flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-medium ${
                                                     item.isReimbursed
-                                                        ? "bg-emerald-50 text-emerald-700"
-                                                        : "bg-white border border-slate-200 text-slate-600"
+                                                        ? "bg-income-soft text-income-on-soft"
+                                                        : "border border-border bg-surface text-soft"
                                                 }`}
-                                                on:click={() => {
-                                                    items = items.map((entry) =>
-                                                        entry.fileIndex === item.fileIndex
-                                                            ? { ...entry, isReimbursed: !entry.isReimbursed }
-                                                            : entry
-                                                    );
-                                                }}
+                                                aria-pressed={item.isReimbursed}
+                                                on:click={() => patchItem(item.fileIndex, { isReimbursed: !item.isReimbursed })}
                                             >
                                                 <CheckCircle2 size={16} />
                                                 {item.isReimbursed ? "เคลียร์แล้ว" : "ยังไม่เคลียร์"}
@@ -555,26 +646,15 @@
 
             <div class="sticky-action-bar">
                 <div class="mx-auto flex max-w-md gap-2">
-                    <button
-                        type="button"
-                        class="btn-secondary"
-                        on:click={() => {
-                            items = [];
-                            fileStore = new Map();
-                        }}
-                    >
-                        ล้างทั้งหมด
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={loading || isProcessing || !reviewableItems.length}
-                        class="btn-primary"
-                    >
+                    <button type="button" class="btn-secondary" on:click={clearAll}>ล้างทั้งหมด</button>
+                    <button type="submit" disabled={loading || isProcessing || items.length === 0} class="btn-primary">
                         {#if loading}
                             <Loader2 size={16} class="animate-spin" />
                             กำลังบันทึก...
+                        {:else if invalidCount > 0}
+                            ยังกรอกไม่ครบ {invalidCount} รายการ
                         {:else}
-                            บันทึก {reviewableItems.length} รายการ
+                            บันทึก {items.length} รายการ
                         {/if}
                     </button>
                 </div>
@@ -583,21 +663,51 @@
     {/if}
 </div>
 
+<Sheet open={showApplyAll} title="ใช้ค่านี้กับทุกใบ" on:close={() => (showApplyAll = false)}>
+    <div class="space-y-3">
+        <div>
+            <label class="field-label" for="bulk-project">โปรเจค</label>
+            <select id="bulk-project" class="field-input" data-autofocus bind:value={bulkProjectId}>
+                {#each data.projects as project (project.id)}
+                    <option value={project.id}>{project.name}</option>
+                {/each}
+            </select>
+        </div>
+
+        {#if data.profiles.length > 1}
+            <div>
+                <label class="field-label" for="bulk-paid-by">ผู้จ่าย</label>
+                <select id="bulk-paid-by" class="field-input" bind:value={bulkPaidBy}>
+                    {#each data.profiles as profile (profile.id)}
+                        <option value={profile.id}>
+                            {profile.display_name}{profile.id === data.currentProfileId ? " (คุณ)" : ""}
+                        </option>
+                    {/each}
+                </select>
+            </div>
+        {/if}
+
+        <div>
+            <label class="field-label" for="bulk-date">วันที่</label>
+            <input id="bulk-date" type="date" class="field-input" bind:value={bulkDate} />
+        </div>
+
+        <button type="button" class="btn-primary w-full" on:click={applyToAll}>
+            ใช้กับ {items.length} รายการ
+        </button>
+    </div>
+</Sheet>
+
 {#if selectedPreview}
-    <button
-        type="button"
-        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4"
-        aria-label="Close preview"
-        on:click={() => (selectedPreview = null)}
-        in:fade={{ duration: 150 }}
-        out:fade={{ duration: 100 }}
-    >
-        <img
-            src={selectedPreview}
-            alt="Slip preview"
-            class="max-h-[90vh] max-w-full rounded-xl object-contain"
-            in:scale
-        />
-        <span class="sr-only">Close preview</span>
-    </button>
+    <div class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4" transition:fade={{ duration: 150 }}>
+        <img src={selectedPreview} alt="สลิปขนาดเต็ม" class="max-h-[85vh] max-w-full rounded-xl object-contain" in:scale />
+        <button
+            type="button"
+            class="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur"
+            aria-label="ปิดรูป"
+            on:click={() => (selectedPreview = null)}
+        >
+            <X size={20} />
+        </button>
+    </div>
 {/if}

@@ -11,7 +11,8 @@ export const handle: Handle = async ({ event, resolve }) => {
                     event.cookies.set(name, value, {
                         ...options,
                         path: '/',
-                        secure: true,
+                        // Plain-http local dev would silently drop a `secure` cookie.
+                        secure: event.url.protocol === 'https:',
                         sameSite: 'lax',
                         maxAge: 60 * 60 * 24 * 10 // 10 days
                     });
