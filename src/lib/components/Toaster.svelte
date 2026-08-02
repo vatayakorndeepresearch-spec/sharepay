@@ -12,8 +12,8 @@
 </script>
 
 <div
-    class="pointer-events-none fixed inset-x-0 z-[90] mx-auto flex max-w-md flex-col gap-2 px-4"
-    style="bottom: calc(var(--safe-bottom) + var(--nav-h) + 16px)"
+    class="pointer-events-none fixed inset-x-0 z-[90] mx-auto flex max-w-md flex-col gap-2"
+    style="bottom: calc(var(--safe-bottom) + var(--nav-h) + 16px); padding-left: calc(1rem + var(--safe-left)); padding-right: calc(1rem + var(--safe-right))"
     role="status"
     aria-live="polite"
 >

@@ -23,7 +23,9 @@
 </script>
 
 <div class="app-shell">
-  <main class="mx-auto max-w-md px-4 pt-4">
+  <div class="status-scrim" aria-hidden="true"></div>
+
+  <main class="app-main" class:app-main-auth={onAuthScreen}>
     <slot />
   </main>
 
@@ -65,7 +67,7 @@
 
     <nav
       class="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/95 backdrop-blur-sm"
-      style="padding-bottom: var(--safe-bottom)"
+      style="padding-bottom: var(--safe-bottom); padding-left: var(--safe-left); padding-right: var(--safe-right)"
       aria-label="เมนูหลัก"
     >
       <div class="mx-auto flex h-nav max-w-md items-center justify-between px-2">

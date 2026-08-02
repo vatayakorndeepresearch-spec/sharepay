@@ -201,7 +201,7 @@
 </script>
 
 <div class="page-shell">
-    <div class="sticky top-0 z-30 -mx-4 space-y-3 bg-bg/95 px-4 pb-3 pt-1 backdrop-blur">
+    <div class="sticky-header bleed-gutter space-y-3 bg-bg/95 pb-3 pt-1 backdrop-blur">
         <header class="flex items-center justify-between">
             <h1 class="page-title">รายการทั้งหมด</h1>
             <button

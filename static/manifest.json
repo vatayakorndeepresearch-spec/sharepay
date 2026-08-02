@@ -5,8 +5,9 @@
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
-    "background_color": "#32276C",
-    "theme_color": "#4f46e5",
+    "orientation": "portrait",
+    "background_color": "#f8fafc",
+    "theme_color": "#f8fafc",
     "lang": "th",
     "description": "แอปติดตามค่าใช้จ่ายกองกลางระหว่างพี่น้อง",
     "icons": [
