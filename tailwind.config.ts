@@ -50,6 +50,12 @@ export default {
       spacing: {
         nav: "var(--nav-h)",
         safe: "var(--safe-bottom)"
+      },
+      transitionDuration: {
+        DEFAULT: "var(--motion-fast)"
+      },
+      transitionTimingFunction: {
+        DEFAULT: "var(--ease-standard)"
       }
     }
   },

@@ -4,6 +4,7 @@
     import { formatDate } from "$lib/utils/formatDate";
     import IdentityChip from "$lib/components/IdentityChip.svelte";
     import Sheet from "$lib/components/Sheet.svelte";
+    import { motion } from "$lib/motion";
     import { toasts } from "$lib/stores/toast";
     import {
         CheckCircle2,
@@ -330,8 +331,16 @@
 </Sheet>
 
 {#if lightboxUrl}
-    <div class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4" transition:fade={{ duration: 150 }}>
-        <img src={lightboxUrl} alt="หลักฐานขนาดเต็ม" class="max-h-[85vh] max-w-full rounded-xl object-contain" in:scale />
+    <div
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4"
+        transition:fade={{ duration: motion.duration.base, easing: motion.easing.standard }}
+    >
+        <img
+            src={lightboxUrl}
+            alt="หลักฐานขนาดเต็ม"
+            class="max-h-[85vh] max-w-full rounded-xl object-contain"
+            in:scale={{ duration: motion.duration.slow, easing: motion.easing.enter }}
+        />
         <button
             type="button"
             class="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur"

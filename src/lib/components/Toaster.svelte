@@ -3,6 +3,7 @@
     import { fly } from "svelte/transition";
     import { AlertTriangle, CheckCircle2, Info, X } from "lucide-svelte";
     import { toasts } from "$lib/stores/toast";
+    import { motion } from "$lib/motion";
 
     const styles = {
         success: "border-income/30 bg-income-soft text-income-on-soft",
@@ -20,9 +21,9 @@
     {#each $toasts as toast (toast.id)}
         <div
             class={`pointer-events-auto flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-sm font-medium shadow-lg ${styles[toast.kind]}`}
-            animate:flip={{ duration: 180 }}
-            in:fly={{ y: 12, duration: 180 }}
-            out:fly={{ y: 12, duration: 120 }}
+            animate:flip={{ duration: motion.duration.base }}
+            in:fly={{ y: 8, duration: motion.duration.base, easing: motion.easing.enter }}
+            out:fly={{ y: 6, duration: motion.duration.fast, easing: motion.easing.exit }}
         >
             {#if toast.kind === "success"}
                 <CheckCircle2 size={16} class="shrink-0" />

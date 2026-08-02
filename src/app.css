@@ -208,6 +208,15 @@
     --safe-left: env(safe-area-inset-left, 0px);
     --safe-right: env(safe-area-inset-right, 0px);
     --gutter: 1rem;
+
+    /* Motion — short enough to keep repeated actions responsive, with a softer
+       enter curve and a faster exit curve so overlays never feel sticky. */
+    --motion-fast: 120ms;
+    --motion-base: 180ms;
+    --motion-slow: 240ms;
+    --ease-standard: cubic-bezier(0.2, 0.7, 0.3, 1);
+    --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   }
 
   :root[data-theme="dark"],
@@ -288,6 +297,7 @@
     padding-left: calc(var(--gutter) + var(--safe-left));
     padding-right: calc(var(--gutter) + var(--safe-right));
     padding-top: calc(var(--safe-top) + 1rem);
+    view-transition-name: app-page;
   }
 
   .app-main-auth {
@@ -336,6 +346,17 @@
   .surface-card {
     @apply bg-surface rounded-2xl border border-border;
     box-shadow: var(--shadow-1);
+  }
+
+  /* Gives tappable cards a physical response without changing their resting UI. */
+  a.surface-card {
+    transition-property: background-color, border-color, box-shadow, transform;
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+
+  a.surface-card:active {
+    transform: scale(0.995);
   }
 
   .surface-card-soft {
@@ -584,22 +605,22 @@
   /* Entrance motion: direct children of .enter fade up with a short stagger.
      Pure animations, so the global reduced-motion rule disables everything. */
   .enter > * {
-    animation: fadeUp 280ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    animation: fadeUp var(--motion-slow) var(--ease-enter) both;
   }
-  .enter > *:nth-child(1) { animation-delay: 40ms; }
-  .enter > *:nth-child(2) { animation-delay: 90ms; }
-  .enter > *:nth-child(3) { animation-delay: 140ms; }
-  .enter > *:nth-child(4) { animation-delay: 190ms; }
-  .enter > *:nth-child(n + 5) { animation-delay: 240ms; }
+  .enter > *:nth-child(1) { animation-delay: 20ms; }
+  .enter > *:nth-child(2) { animation-delay: 50ms; }
+  .enter > *:nth-child(3) { animation-delay: 80ms; }
+  .enter > *:nth-child(4) { animation-delay: 110ms; }
+  .enter > *:nth-child(n + 5) { animation-delay: 140ms; }
 
   .bar {
     transform-origin: bottom;
-    animation: grow 420ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    animation: grow 420ms var(--ease-enter) both;
   }
 
   .bar-h {
     transform-origin: left;
-    animation: grow-x 420ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    animation: grow-x 420ms var(--ease-enter) both;
   }
 
   .skeleton {
@@ -607,14 +628,54 @@
   }
 }
 
+.entry-fab-icon {
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+
+.entry-fab-open .entry-fab-icon {
+  transform: rotate(45deg);
+}
+
+/* The bottom navigation belongs to the app shell, not to each page snapshot. */
+nav[aria-label="เมนูหลัก"] {
+  view-transition-name: app-nav;
+}
+
+::view-transition-group(root),
+::view-transition-group(app-nav) {
+  animation-duration: 0s;
+}
+
+::view-transition-old(app-page) {
+  animation: page-out var(--motion-fast) var(--ease-exit) both;
+}
+
+::view-transition-new(app-page) {
+  animation: page-in var(--motion-slow) var(--ease-enter) both;
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes page-out {
+  to {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 

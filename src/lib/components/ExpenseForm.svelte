@@ -13,6 +13,7 @@
         Trash2,
     } from "lucide-svelte";
     import CategoryPicker from "$lib/components/CategoryPicker.svelte";
+    import { motion } from "$lib/motion";
     import { acquireOCRWorker, releaseOCRWorker } from "$lib/stores/ocrStore";
     import { toasts } from "$lib/stores/toast";
     import { extractFromImage, toFormFields } from "$lib/utils/slipClient";
@@ -274,7 +275,7 @@
 {#if formError}
     <div
         class="surface-card flex items-start gap-2 border-danger/30 bg-danger-soft p-3 text-sm font-medium text-danger-on-soft"
-        in:slide
+        in:slide={{ duration: motion.duration.slow, easing: motion.easing.enter }}
     >
         <AlertTriangle size={16} class="mt-0.5 shrink-0" />
         {formError}
@@ -470,7 +471,7 @@
         {#if slipNotice}
             <div
                 class="mt-3 flex items-center justify-between gap-2 rounded-xl border border-pending/30 bg-pending-soft px-3 py-2 text-xs font-medium text-pending-on-soft"
-                in:slide
+                in:slide={{ duration: motion.duration.slow, easing: motion.easing.enter }}
             >
                 <span>{slipNotice}</span>
                 {#if duplicateExpenseId}
@@ -482,7 +483,10 @@
         {/if}
 
         {#if previewUrls.length > 0}
-            <div class="mt-3 grid grid-cols-2 gap-2" in:slide>
+            <div
+                class="mt-3 grid grid-cols-2 gap-2"
+                in:slide={{ duration: motion.duration.slow, easing: motion.easing.enter }}
+            >
                 {#each previewUrls as url, index (url)}
                     <div class="overflow-hidden rounded-lg border border-border bg-surface-muted">
                         <img src={url} alt={`สลิปที่เพิ่งเลือก ${index + 1}`} class="w-full object-contain" />

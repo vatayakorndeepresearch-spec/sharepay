@@ -14,6 +14,7 @@
     } from "lucide-svelte";
     import { fade, slide } from "svelte/transition";
     import IdentityChip from "$lib/components/IdentityChip.svelte";
+    import { motion } from "$lib/motion";
     import { theme } from "$lib/stores/theme";
     import { toasts } from "$lib/stores/toast";
 
@@ -152,7 +153,10 @@
         </div>
 
         {#if data.isEnabled}
-            <div class="flex items-start gap-3 rounded-xl bg-income-soft p-4" in:fade>
+            <div
+                class="flex items-start gap-3 rounded-xl bg-income-soft p-4"
+                in:fade={{ duration: motion.duration.base, easing: motion.easing.enter }}
+            >
                 <ShieldCheck size={18} class="mt-0.5 shrink-0 text-income" />
                 <div>
                     <div class="text-sm font-medium text-income-on-soft">เปิดใช้งานเรียบร้อยแล้ว</div>
@@ -187,7 +191,10 @@
             {/if}
 
             {#if form?.qr}
-                <div class="space-y-4" in:slide>
+                <div
+                    class="space-y-4"
+                    in:slide={{ duration: motion.duration.slow, easing: motion.easing.enter }}
+                >
                     <div class="flex flex-col items-center rounded-xl bg-surface-muted p-6">
                         <div class="mb-3 rounded-xl bg-white p-3">
                             <img src={form.qr} alt="QR code สำหรับตั้งค่า 2FA" class="h-36 w-36" />

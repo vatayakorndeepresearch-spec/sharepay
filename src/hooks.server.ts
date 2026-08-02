@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { type Handle } from '@sveltejs/kit';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { isAllowedEmail } from '$lib/server/allowedUsers';
 
 export const handle: Handle = async ({ event, resolve }) => {
     event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
@@ -22,8 +23,21 @@ export const handle: Handle = async ({ event, resolve }) => {
     });
 
     const {
-        data: { user },
+        data: { user: signedInUser },
     } = await event.locals.supabase.auth.getUser();
+
+    // Two-person app: any other account gets its session torn down on sight.
+    let user = signedInUser;
+    if (user && !isAllowedEmail(user.email)) {
+        await event.locals.supabase.auth.signOut();
+        user = null;
+        if (!event.url.pathname.startsWith('/api/')) {
+            return new Response(null, {
+                status: 303,
+                headers: { location: '/login?error=NotAllowed' },
+            });
+        }
+    }
 
     event.locals.user = user ?? null;
     event.locals.session = user ? { user } as any : null;

@@ -2,6 +2,7 @@
     import { createEventDispatcher, onDestroy } from "svelte";
     import { fade, fly } from "svelte/transition";
     import { X } from "lucide-svelte";
+    import { motion } from "$lib/motion";
 
     export let open = false;
     export let title: string;
@@ -80,7 +81,7 @@
         aria-label="ปิด"
         tabindex="-1"
         on:click={close}
-        transition:fade={{ duration: 150 }}
+        transition:fade={{ duration: motion.duration.base, easing: motion.easing.standard }}
     ></button>
 
     <div
@@ -90,8 +91,8 @@
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabindex="-1"
-        in:fly={{ y: 24, duration: 180 }}
-        out:fly={{ y: 24, duration: 120 }}
+        in:fly={{ y: 20, duration: motion.duration.slow, easing: motion.easing.enter }}
+        out:fly={{ y: 12, duration: motion.duration.fast, easing: motion.easing.exit }}
     >
         {#if showHeader}
             <div class="mb-4 flex items-center justify-between">

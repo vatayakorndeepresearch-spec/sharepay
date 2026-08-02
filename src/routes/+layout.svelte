@@ -1,5 +1,6 @@
 <script lang="ts">
   import "../app.css";
+  import { onNavigate } from "$app/navigation";
   import { page } from "$app/stores";
   import { Home, List, PieChart, Plus, Receipt, ScanLine, Settings } from "lucide-svelte";
   import Sheet from "$lib/components/Sheet.svelte";
@@ -17,6 +18,25 @@
   function isActive(pathname: string, href: string) {
     return pathname === href || (href !== "/" && pathname.startsWith(href));
   }
+
+  // Keep persistent navigation steady while the page content changes. Browsers
+  // without the View Transitions API keep SvelteKit's native instant navigation.
+  onNavigate((navigation) => {
+    if (
+      !document.startViewTransition ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      navigation.from?.url.pathname === navigation.to?.url.pathname
+    ) {
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      document.startViewTransition(async () => {
+        resolve();
+        await navigation.complete;
+      });
+    });
+  });
 
   $: onAuthScreen =
     $page.url.pathname.startsWith("/login") || $page.url.pathname.startsWith("/auth");
@@ -87,12 +107,12 @@
 
         <button
           type="button"
-          class="-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/40 transition-all hover:bg-accent-hover active:scale-95"
+          class={`-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/40 transition-all hover:bg-accent-hover active:scale-95 ${showEntrySheet ? "entry-fab-open" : ""}`}
           aria-label="บันทึกรายการใหม่"
           aria-expanded={showEntrySheet}
           on:click={() => (showEntrySheet = !showEntrySheet)}
         >
-          <Plus size={24} strokeWidth={2.5} />
+          <Plus class="entry-fab-icon" size={24} strokeWidth={2.5} />
         </button>
 
         {#each tabs.slice(2) as tab}

@@ -17,6 +17,7 @@
     } from "lucide-svelte";
     import { fade, fly, scale } from "svelte/transition";
     import EmptyState from "$lib/components/EmptyState.svelte";
+    import { motion } from "$lib/motion";
     import Sheet from "$lib/components/Sheet.svelte";
     import { acquireOCRWorker, releaseOCRWorker } from "$lib/stores/ocrStore";
     import { toasts } from "$lib/stores/toast";
@@ -338,7 +339,7 @@
         </label>
 
         {#if isProcessing}
-            <div class="mt-3" in:fade>
+            <div class="mt-3" in:fade={{ duration: motion.duration.base, easing: motion.easing.enter }}>
                 <div class="mb-1.5 flex items-center justify-between text-xs font-medium">
                     <span class="text-accent">กำลังอ่าน {Math.min(scanDone + 1, scanTotal)}/{scanTotal}</span>
                     <button type="button" class="text-danger-on-soft" on:click={() => (cancelRequested = true)}>
@@ -408,7 +409,7 @@
                 {@const problems = itemProblems(item)}
                 <section
                     class={`surface-card overflow-hidden ${problems.length > 0 ? "border-pending/50" : ""}`}
-                    in:scale={{ duration: 150 }}
+                    in:scale={{ duration: motion.duration.base, easing: motion.easing.enter }}
                 >
                     <div class="flex gap-3 p-3">
                         <button
@@ -536,7 +537,10 @@
                     <input type="hidden" name={`item_${index}_notes`} value={item.notes} />
 
                     {#if item.expanded}
-                        <div class="border-t border-border bg-surface-muted p-3" in:fly={{ y: -8, duration: 150 }}>
+                        <div
+                            class="border-t border-border bg-surface-muted p-3"
+                            in:fly={{ y: -8, duration: motion.duration.base, easing: motion.easing.enter }}
+                        >
                             <div class="space-y-3">
                                 <div class="grid grid-cols-2 gap-1.5 rounded-xl border border-border bg-surface p-1.5">
                                     <button
@@ -724,8 +728,16 @@
 </Sheet>
 
 {#if selectedPreview}
-    <div class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4" transition:fade={{ duration: 150 }}>
-        <img src={selectedPreview} alt="สลิปขนาดเต็ม" class="max-h-[85vh] max-w-full rounded-xl object-contain" in:scale />
+    <div
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4"
+        transition:fade={{ duration: motion.duration.base, easing: motion.easing.standard }}
+    >
+        <img
+            src={selectedPreview}
+            alt="สลิปขนาดเต็ม"
+            class="max-h-[85vh] max-w-full rounded-xl object-contain"
+            in:scale={{ duration: motion.duration.slow, easing: motion.easing.enter }}
+        />
         <button
             type="button"
             class="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur"

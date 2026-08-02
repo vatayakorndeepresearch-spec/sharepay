@@ -1,9 +1,17 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
+    import { page } from "$app/stores";
     import { AlertTriangle, Loader2, Wallet } from "lucide-svelte";
 
     export let form;
     let loading = false;
+
+    const urlErrors: Record<string, string> = {
+        NotAllowed: "บัญชีนี้ไม่ได้รับอนุญาตให้ใช้ SharePay",
+        AuthCodeError: "เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง",
+    };
+
+    $: errorMessage = form?.error ?? urlErrors[$page.url.searchParams.get("error") ?? ""];
 </script>
 
 <div class="auth-shell">
@@ -19,10 +27,10 @@
         </div>
 
         <div class="surface-card p-6">
-            {#if form?.error}
+            {#if errorMessage}
                 <div class="mb-4 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm font-medium text-danger-on-soft">
                     <AlertTriangle size={16} class="mt-0.5 shrink-0" />
-                    {form.error}
+                    {errorMessage}
                 </div>
             {/if}
 
