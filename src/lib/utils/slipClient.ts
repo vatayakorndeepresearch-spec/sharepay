@@ -3,7 +3,8 @@ import { EMPTY_EXTRACTION, type SlipExtractResponse, type SlipQrHint } from '$li
 import { getOCRWorker } from '$lib/stores/ocrStore';
 import { extractExpenseData } from '$lib/utils/expenseForm';
 import { preprocessImage } from '$lib/utils/imageProcessor';
-import { readSlipQrHint } from '$lib/utils/slipQr';
+import { parseSlipMiniQr, readSlipQrHint } from '$lib/utils/slipQr';
+import { binarizeSlipInWorker, prepareSlipInWorker } from '$lib/utils/slipWorkerClient';
 
 const MAX_EDGE = 1600;
 const JPEG_QUALITY = 0.85;
@@ -44,7 +45,8 @@ function canvasToBase64Jpeg(canvas: HTMLCanvasElement): string {
 
 async function tesseractFallback(file: File): Promise<SlipExtractResponse> {
     const worker = await getOCRWorker();
-    const processed = await preprocessImage(file);
+    const binarized = await binarizeSlipInWorker(file).catch(() => null);
+    const processed = binarized ? binarized.blob : await preprocessImage(file);
     const {
         data: { text }
     } = await worker.recognize(processed);
@@ -82,9 +84,17 @@ export async function extractFromImage(file: File, options: ExtractOptions = {})
     let imageBase64 = '';
 
     try {
-        const canvas = await downscaleToCanvas(file);
-        hint = await readSlipQrHint(canvas);
-        imageBase64 = canvasToBase64Jpeg(canvas);
+        // Preferred path: downscale + QR decode happen in a worker, so a bulk scan
+        // never walks pixels on the main thread.
+        const prepared = await prepareSlipInWorker(file).catch(() => null);
+        if (prepared) {
+            imageBase64 = prepared.imageBase64;
+            hint = prepared.qrPayload ? parseSlipMiniQr(prepared.qrPayload) : null;
+        } else {
+            const canvas = await downscaleToCanvas(file);
+            hint = await readSlipQrHint(canvas);
+            imageBase64 = canvasToBase64Jpeg(canvas);
+        }
     } catch (err) {
         console.error('[slip] image prep failed:', err);
         return tesseractFallback(file);

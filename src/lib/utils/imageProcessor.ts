@@ -78,8 +78,6 @@ export async function preprocessImage(file: File): Promise<string> {
             const THRESHOLD_OFFSET = 25;
             const threshold = Math.max(100, backgroundPeak - THRESHOLD_OFFSET);
 
-            console.log(`[OCR Preprocessing] Background Peak: ${backgroundPeak}, Dynamic Threshold: ${threshold}`);
-
             // 4. Contrast & Binary Thresholding using Dynamic Threshold
             for (let i = 0; i < data.length; i += 4) {
                 // Retrieve pre-calculated gray from R channel
