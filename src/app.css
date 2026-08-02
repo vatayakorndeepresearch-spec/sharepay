@@ -210,6 +210,29 @@
     appearance: textfield;
   }
 
+  /* iOS Safari sizes date inputs from its own picker chrome: it ignores padding,
+     centers the value, and balloons the box. Pin the height and left-align. */
+  .field-input[type='date'] {
+    @apply h-11 text-left;
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    line-height: 1.25rem;
+  }
+  .field-input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
+    font-size: 1rem;
+    line-height: 1.25rem;
+  }
+  @media (min-width: 640px) {
+    .field-input[type='date'] {
+      @apply h-10;
+    }
+    .field-input[type='date']::-webkit-date-and-time-value {
+      font-size: 0.875rem;
+    }
+  }
+
   .field-highlight {
     @apply border-accent bg-accent-soft;
   }
