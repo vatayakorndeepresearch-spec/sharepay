@@ -311,6 +311,47 @@ export async function aiCategorize(input: {
     }
 }
 
+/** Batch variant for the bulk scanner: N slips, one request, one DeepSeek call.
+ *  Returns a map keyed by the caller's own ids; missing entries mean "no suggestion". */
+export async function aiCategorizeBatch(
+    inputs: Array<{
+        id: string | number;
+        transactionType: TransactionType;
+        description?: string | null;
+        notes?: string | null;
+    }>
+): Promise<Map<string | number, string>> {
+    const empty = new Map<string | number, string>();
+    if (aiCategorizeDisabled || inputs.length === 0) return empty;
+
+    try {
+        const response = await fetch('/api/categorize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                items: inputs.map((input) => ({
+                    id: input.id,
+                    transactionType: input.transactionType,
+                    description: input.description || '',
+                    notes: input.notes || ''
+                }))
+            })
+        });
+
+        if (!response.ok) return empty;
+        const data = await response.json();
+        if (data.disabled) aiCategorizeDisabled = true;
+
+        const results = new Map<string | number, string>();
+        for (const entry of data.results || []) {
+            results.set(entry.id, entry.category || '');
+        }
+        return results;
+    } catch {
+        return empty;
+    }
+}
+
 export interface QuickParseResult {
     transaction_type: TransactionType;
     amount: number | null;

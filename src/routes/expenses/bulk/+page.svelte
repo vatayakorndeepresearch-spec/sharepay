@@ -24,6 +24,7 @@
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import {
         aiCategorize,
+        aiCategorizeBatch,
         expenseCategories,
         getTodayLocalDate,
         incomeCategories,
@@ -139,6 +140,12 @@
             const extraction = await extractWithRetry(file);
             const fields = toFormFields(extraction);
             const hasText = Boolean(fields.notes || fields.description);
+            // Keyword match is free and instant; anything it misses waits for the
+            // one batched AI call fired once the whole scan finishes.
+            const localMatch = hasText
+                ? inferCategoryFromText("expense", fields.description, fields.notes)
+                : "";
+            const needsAi = hasText && !localMatch && isAiCategorizeAvailable();
 
             patchItem(fileIndex, {
                 status: extraction.duplicate_of ? "duplicate" : "ready",
@@ -147,22 +154,39 @@
                 date: fields.date || getTodayLocalDate(),
                 notes: fields.notes,
                 description: fields.description,
-                category: "",
-                aiCategorizing: hasText,
+                category: localMatch,
+                aiCategorizing: needsAi,
                 ...(extraction.duplicate_of ? { expanded: true } : {}),
             });
-
-            if (hasText) {
-                const updated = items.find((item) => item.fileIndex === fileIndex);
-                if (updated) {
-                    const suggested = await autoCategory(updated);
-                    patchItem(fileIndex, { category: suggested, aiCategorizing: false });
-                }
-            }
         } catch (error) {
             console.error("Slip extraction error:", error);
             patchItem(fileIndex, { status: "error", expanded: true, aiCategorizing: false });
         }
+    }
+
+    /** Every slip still waiting on AI goes out in one request instead of one each. */
+    async function categorizePending() {
+        const pending = items.filter((item) => item.aiCategorizing);
+        if (pending.length === 0) return;
+
+        const suggestions = await aiCategorizeBatch(
+            pending.map((item) => ({
+                id: item.fileIndex,
+                transactionType: item.transactionType,
+                description: item.description,
+                notes: item.notes,
+            })),
+        );
+
+        items = items.map((item) =>
+            item.aiCategorizing
+                ? {
+                      ...item,
+                      category: item.category || suggestions.get(item.fileIndex) || "",
+                      aiCategorizing: false,
+                  }
+                : item,
+        );
     }
 
     async function processFiles(fileList: FileList) {
@@ -212,6 +236,7 @@
         });
 
         await Promise.all(runners);
+        await categorizePending();
 
         isProcessing = false;
         if (cancelRequested) {
