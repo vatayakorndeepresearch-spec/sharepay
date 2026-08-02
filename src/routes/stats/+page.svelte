@@ -4,12 +4,13 @@
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import EmptyState from "$lib/components/EmptyState.svelte";
     import {
-        Award,
         ChartBar,
         Filter,
-        PieChart as PieChartIcon,
+        Hash,
+        Receipt,
         TrendingDown,
         TrendingUp,
+        Users,
         Wallet,
     } from "lucide-svelte";
 
@@ -18,9 +19,24 @@
     // Fixed slot order — colors follow the category, resolved per-theme in app.css.
     const CHART_COLORS = [1, 2, 3, 4, 5, 6, 7].map((n) => `var(--chart-${n})`);
 
+    const RANGES = [
+        { value: "3m", label: "3 เดือน" },
+        { value: "6m", label: "6 เดือน" },
+        { value: "12m", label: "1 ปี" },
+        { value: "all", label: "ทั้งหมด" },
+    ];
+
+    function buildUrl(projectId: string, range: string) {
+        const params = new URLSearchParams();
+        if (projectId !== "all") params.set("projectId", projectId);
+        if (range !== "6m") params.set("range", range);
+        const query = params.toString();
+        return query ? `/stats?${query}` : "/stats";
+    }
+
     function handleProjectChange(event: Event) {
         const projectId = (event.currentTarget as HTMLSelectElement).value;
-        goto(projectId === "all" ? "/stats" : `?projectId=${projectId}`);
+        goto(buildUrl(projectId, data.selectedRange));
     }
 
     $: monthDelta =
@@ -55,46 +71,76 @@
         </select>
     </section>
 
-    <section class="surface-card p-4">
-        <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
-            <Wallet size={13} class="text-accent" />
-            เดือนนี้ใช้ไป
-        </div>
-        <div class="mt-1 text-3xl font-bold text-text font-display">
-            {formatCurrency(data.thisMonthExpense)}
-        </div>
-        {#if monthDelta !== null}
-            <div
-                class={`mt-1.5 inline-flex items-center gap-1 text-xs font-medium ${
-                    monthDelta > 0 ? "text-pending-on-soft" : "text-income-on-soft"
+    <div class="flex gap-1.5" role="group" aria-label="ช่วงเวลา">
+        {#each RANGES as range (range.value)}
+            <a
+                href={buildUrl(data.selectedProjectId, range.value)}
+                class={`flex-1 rounded-full px-2 py-1.5 text-center text-xs font-semibold transition-colors ${
+                    data.selectedRange === range.value
+                        ? "bg-accent text-white"
+                        : "bg-surface-muted text-muted hover:text-soft"
                 }`}
+                aria-current={data.selectedRange === range.value ? "true" : undefined}
             >
-                <svelte:component this={monthDelta > 0 ? TrendingUp : TrendingDown} size={13} />
-                {monthDelta > 0 ? "+" : ""}{monthDelta}% จากเดือนที่แล้ว ({formatCurrency(data.previousMonthExpense)})
-            </div>
-        {/if}
-        <div class="mt-3 border-t border-border pt-3 text-xs text-muted">
-            รวมทั้งหมด <span class="font-semibold text-text">{formatCurrency(data.totalExpense)}</span>
-        </div>
-    </section>
+                {range.label}
+            </a>
+        {/each}
+    </div>
 
     <section class="grid grid-cols-2 gap-2">
         <div class="surface-card p-4">
-            <div class="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted">
-                <Award size={13} class="text-pending" />
-                ออกเยอะสุด
+            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <Wallet size={13} class="text-accent" />
+                เดือนนี้
             </div>
-            <div class="truncate text-base font-bold text-text font-display">{data.topSpender.name || "-"}</div>
-            <div class="text-xs text-muted">{formatCurrency(data.topSpender.amount || 0)}</div>
+            <div class="mt-1 truncate text-xl font-bold text-text font-display">
+                {formatCurrency(data.thisMonthExpense)}
+            </div>
+            {#if monthDelta !== null}
+                <div
+                    class={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium ${
+                        monthDelta > 0 ? "text-pending-on-soft" : "text-income-on-soft"
+                    }`}
+                >
+                    <svelte:component this={monthDelta > 0 ? TrendingUp : TrendingDown} size={11} />
+                    {monthDelta > 0 ? "+" : ""}{monthDelta}% จากเดือนก่อน
+                </div>
+            {:else}
+                <div class="mt-0.5 text-[11px] text-muted">ยังไม่มีเดือนก่อนเทียบ</div>
+            {/if}
         </div>
 
         <div class="surface-card p-4">
-            <div class="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted">
-                <PieChartIcon size={13} class="text-income" />
-                หมวดสูงสุด
+            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <ChartBar size={13} class="text-income" />
+                เฉลี่ยต่อเดือน
             </div>
-            <div class="truncate text-base font-bold text-text font-display">{data.topCategory.name || "-"}</div>
-            <div class="text-xs text-muted">{formatCurrency(data.topCategory.amount || 0)}</div>
+            <div class="mt-1 truncate text-xl font-bold text-text font-display">
+                {formatCurrency(data.monthlyAverage)}
+            </div>
+            <div class="mt-0.5 text-[11px] text-muted">ไม่รวมเดือนปัจจุบัน</div>
+        </div>
+
+        <div class="surface-card p-4">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <Hash size={13} class="text-pending" />
+                จำนวนรายการ
+            </div>
+            <div class="mt-1 text-xl font-bold text-text font-display">{data.expenseCount}</div>
+            <div class="mt-0.5 text-[11px] text-muted">
+                รวม {formatCurrency(data.totalExpense)}
+            </div>
+        </div>
+
+        <div class="surface-card p-4">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <Receipt size={13} class="text-accent" />
+                เฉลี่ยต่อรายการ
+            </div>
+            <div class="mt-1 truncate text-xl font-bold text-text font-display">
+                {formatCurrency(data.averagePerExpense)}
+            </div>
+            <div class="mt-0.5 text-[11px] text-muted">ในช่วงที่เลือก</div>
         </div>
     </section>
 
@@ -107,6 +153,46 @@
             actionHref="/expenses/new"
         />
     {:else}
+        <section class="surface-card p-4">
+            <div class="mb-3 flex items-baseline justify-between">
+                <h2 class="text-sm font-semibold text-text">แนวโน้มรายเดือน</h2>
+                <span class="text-[11px] text-muted">เฉลี่ย {formatCurrency(data.monthlyAverage)}/เดือน</span>
+            </div>
+            <div class="relative h-56">
+                <BarChart
+                    data={data.monthlyExpenses}
+                    x="month"
+                    y="value"
+                    bandPadding={0.3}
+                    series={[
+                        {
+                            key: "value",
+                            label: "รายจ่าย",
+                            color: "var(--chart-1)",
+                            props: { radius: 4, rounded: "top", strokeWidth: 0 },
+                        },
+                    ]}
+                    annotations={[
+                        {
+                            type: "line",
+                            y: data.monthlyAverage,
+                            label: "เฉลี่ย",
+                            labelPlacement: "top-right",
+                            props: {
+                                line: { class: "stroke-[var(--chart-2)] [stroke-dasharray:4_3]" },
+                                label: { class: "text-[9px] fill-muted" },
+                            },
+                        },
+                    ]}
+                    props={{
+                        xAxis: { tickLabelProps: { class: "text-[10px] fill-muted font-medium" } },
+                        yAxis: { tickLabelProps: { class: "text-[10px] fill-muted" } },
+                        grid: { class: "stroke-[var(--chart-grid)]" },
+                    }}
+                />
+            </div>
+        </section>
+
         <section class="surface-card p-4">
             <h2 class="mb-3 text-sm font-semibold text-text">แบ่งตามหมวดหมู่</h2>
             <div class="relative h-52">
@@ -142,27 +228,35 @@
         </section>
 
         <section class="surface-card p-4">
-            <h2 class="mb-3 text-sm font-semibold text-text">แนวโน้มรายเดือน</h2>
-            <div class="relative h-56">
-                <BarChart
-                    data={data.monthlyExpenses}
-                    x="month"
-                    y="value"
-                    bandPadding={0.3}
-                    series={[
-                        {
-                            key: "value",
-                            label: "รายจ่าย",
-                            color: "var(--chart-1)",
-                            props: { radius: 4, rounded: "top", strokeWidth: 0 },
-                        },
-                    ]}
-                    props={{
-                        xAxis: { tickLabelProps: { class: "text-[10px] fill-muted font-medium" } },
-                        yAxis: { tickLabelProps: { class: "text-[10px] fill-muted" } },
-                        grid: { class: "stroke-[var(--chart-grid)]" },
-                    }}
-                />
+            <h2 class="mb-3 flex items-center gap-1.5 text-sm font-semibold text-text">
+                <Users size={15} class="text-accent" />
+                ใครออกเงินเท่าไหร่
+            </h2>
+            <div class="space-y-3">
+                {#each data.spenderBreakdown as spender (spender.label)}
+                    <div>
+                        <div class="mb-1 flex items-baseline justify-between gap-2">
+                            <span class="min-w-0 flex-1 truncate text-sm font-medium text-soft">
+                                {spender.label}
+                            </span>
+                            <span class="shrink-0 text-xs text-muted">{spender.count} รายการ</span>
+                            <span class="shrink-0 text-sm font-semibold text-text">
+                                {formatCurrency(spender.value)}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                                <div
+                                    class="h-full rounded-full bg-accent"
+                                    style={`width:${Math.max(spender.percent, 2)}%`}
+                                ></div>
+                            </div>
+                            <span class="w-9 shrink-0 text-right text-xs font-medium text-muted">
+                                {spender.percent}%
+                            </span>
+                        </div>
+                    </div>
+                {/each}
             </div>
         </section>
     {/if}
