@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { resolveCategory } from '$lib/utils/expenseForm';
+import { recordSlipExtraction } from '$lib/server/slipExtractions';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const [{ data: projects }, { currentProfileId, currentUser }] = await Promise.all([
@@ -39,6 +40,7 @@ export const actions: Actions = {
 
         const files = formData.getAll('proof_images') as File[];
         let uploadedUrls: string[] = [];
+        let firstStoragePath: string | null = null;
 
         // Handle Multiple File Uploads
         if (files && files.length > 0) {
@@ -71,6 +73,7 @@ export const actions: Actions = {
                         .getPublicUrl(fileName);
 
                     uploadedUrls.push(publicUrl);
+                    if (!firstStoragePath) firstStoragePath = fileName;
                 }
             }
         }
@@ -98,6 +101,14 @@ export const actions: Actions = {
             console.error('Insert Error:', insertError);
             return fail(500, { error: 'เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่อีกครั้ง' });
         }
+
+        // Audit the slip extraction that filled this form (never blocks the save)
+        await recordSlipExtraction(
+            supabase,
+            formData.get('slip_extraction') as string | null,
+            expense?.id ?? null,
+            firstStoragePath
+        );
 
         // Insert Attachments
         if (uploadedUrls.length > 0 && expense) {

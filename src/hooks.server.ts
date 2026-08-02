@@ -27,6 +27,14 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.user = user ?? null;
     event.locals.session = user ? { user } as any : null;
 
+    // API routes answer with JSON 401 instead of a redirect the client cannot follow
+    if (!user && event.url.pathname.startsWith('/api/')) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+            status: 401,
+            headers: { 'content-type': 'application/json' }
+        });
+    }
+
     // Protect routes
     if (!user && !event.url.pathname.startsWith('/login') && !event.url.pathname.startsWith('/auth')) {
         return new Response(null, {

@@ -15,10 +15,9 @@
         X,
     } from "lucide-svelte";
     import { fade, fly, scale } from "svelte/transition";
-    import { getOCRWorker, terminateOCRWorker } from "$lib/stores/ocrStore";
-    import { preprocessImage } from "$lib/utils/imageProcessor";
+    import { terminateOCRWorker } from "$lib/stores/ocrStore";
+    import { extractFromImage, toFormFields } from "$lib/utils/slipClient";
     import {
-        extractExpenseData,
         expenseCategories,
         incomeCategories,
         inferCategoryFromText,
@@ -34,7 +33,8 @@
     type ReviewItem = {
         fileIndex: number;
         previewUrl: string;
-        status: "scanning" | "ready" | "error";
+        status: "queued" | "scanning" | "ready" | "error" | "duplicate";
+        duplicateExpenseId: string | null;
         amount: number | null;
         notes: string;
         description: string;
@@ -79,78 +79,110 @@
         }
     }
 
+    const CONCURRENCY = 3;
+    const BACKOFF_MS = [1000, 4000, 10000];
+
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    function patchItem(fileIndex: number, patch: Partial<ReviewItem>) {
+        items = items.map((item) => (item.fileIndex === fileIndex ? { ...item, ...patch } : item));
+    }
+
+    /** Retries only on provider rate limits; any other failure lands on the Tesseract path. */
+    async function extractWithRetry(file: File) {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await extractFromImage(file);
+            } catch (error: any) {
+                if (error?.status === 429 && attempt < BACKOFF_MS.length) {
+                    await sleep(BACKOFF_MS[attempt]);
+                    continue;
+                }
+                return await extractFromImage(file, { forceFallback: true });
+            }
+        }
+    }
+
+    async function scanItem(fileIndex: number) {
+        const file = fileStore.get(fileIndex);
+        if (!file) return;
+
+        patchItem(fileIndex, { status: "scanning" });
+
+        try {
+            const extraction = await extractWithRetry(file);
+            const fields = toFormFields(extraction);
+            const hasText = !!(fields.notes || fields.description);
+
+            patchItem(fileIndex, {
+                status: extraction.duplicate_of ? "duplicate" : "ready",
+                duplicateExpenseId: extraction.duplicate_of?.expense_id ?? null,
+                amount: fields.amount,
+                date: fields.date || getTodayLocalDate(),
+                notes: fields.notes,
+                description: fields.description,
+                category: "",
+                aiCategorizing: hasText,
+                ...(extraction.duplicate_of ? { expanded: true } : {}),
+            });
+
+            if (hasText) {
+                const updatedItem = items.find((item) => item.fileIndex === fileIndex);
+                if (updatedItem) {
+                    const suggestedCategory = await autoCategory(updatedItem);
+                    patchItem(fileIndex, { category: suggestedCategory, aiCategorizing: false });
+                }
+            }
+        } catch (error) {
+            console.error("Slip extraction error:", error);
+            patchItem(fileIndex, { status: "error", expanded: true, aiCategorizing: false });
+        }
+    }
+
     async function processFiles(files: FileList) {
         isProcessing = true;
-        const worker = await getOCRWorker();
+
+        const queued: number[] = [];
+        const startedEmpty = items.length === 0;
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const previewUrl = URL.createObjectURL(file);
-
             const fileIndex = Date.now() + i;
             fileStore.set(fileIndex, file);
+            queued.push(fileIndex);
 
-            const initialItem: ReviewItem = {
-                fileIndex,
-                previewUrl,
-                status: "scanning",
-                amount: null,
-                notes: "",
-                description: "",
-                date: getTodayLocalDate(),
-                category: "",
-                projectId: defaultProjectId,
-                paidBy: data.currentProfileId || "",
-                transactionType: "expense",
-                isReimbursed: false,
-                expanded: i === 0 && items.length === 0,
-                aiCategorizing: false,
-            };
-
-            items = [...items, initialItem];
-
-            try {
-                const processedImageUrl = await preprocessImage(file);
-                const {
-                    data: { text },
-                } = await worker.recognize(processedImageUrl);
-                const extracted = extractExpenseData(text);
-
-                items = items.map((item) =>
-                    item.fileIndex === fileIndex
-                        ? {
-                              ...item,
-                              status: "ready",
-                              amount: extracted.amount,
-                              date: extracted.date,
-                              notes: extracted.notes,
-                              description: extracted.description || item.description,
-                              category: "",
-                              aiCategorizing: !!(extracted.notes || extracted.description),
-                          }
-                        : item
-                );
-
-                // Auto-categorize after OCR
-                if (extracted.notes || extracted.description) {
-                    const updatedItem = items.find((i) => i.fileIndex === fileIndex);
-                    if (updatedItem) {
-                        const suggestedCategory = await autoCategory(updatedItem);
-                        items = items.map((item) =>
-                            item.fileIndex === fileIndex
-                                ? { ...item, category: suggestedCategory, aiCategorizing: false }
-                                : item
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error("OCR Error:", error);
-                items = items.map((item) =>
-                    item.fileIndex === fileIndex ? { ...item, status: "error", expanded: true, aiCategorizing: false } : item
-                );
-            }
+            items = [
+                ...items,
+                {
+                    fileIndex,
+                    previewUrl: URL.createObjectURL(file),
+                    status: "queued",
+                    duplicateExpenseId: null,
+                    amount: null,
+                    notes: "",
+                    description: "",
+                    date: getTodayLocalDate(),
+                    category: "",
+                    projectId: defaultProjectId,
+                    paidBy: data.currentProfileId || "",
+                    transactionType: "expense",
+                    isReimbursed: false,
+                    expanded: startedEmpty && i === 0,
+                    aiCategorizing: false,
+                },
+            ];
         }
 
+        // Simple promise pool: CONCURRENCY files in flight, one failure never aborts the batch.
+        let cursor = 0;
+        const runners = Array.from({ length: Math.min(CONCURRENCY, queued.length) }, async () => {
+            while (cursor < queued.length) {
+                const fileIndex = queued[cursor++];
+                await scanItem(fileIndex);
+            }
+        });
+
+        await Promise.all(runners);
         isProcessing = false;
     }
 
@@ -296,15 +328,31 @@
                                                     ? "bg-emerald-50 text-emerald-700"
                                                     : item.status === "error"
                                                       ? "bg-rose-50 text-rose-700"
-                                                      : "bg-indigo-50 text-indigo-700"
+                                                      : item.status === "duplicate"
+                                                        ? "bg-amber-50 text-amber-700"
+                                                        : item.status === "queued"
+                                                          ? "bg-slate-100 text-slate-500"
+                                                          : "bg-indigo-50 text-indigo-700"
                                             }`}
                                         >
                                             {item.status === "ready"
                                                 ? "พร้อม"
                                                 : item.status === "error"
                                                   ? "อ่านไม่ได้"
-                                                  : "กำลังอ่าน"}
+                                                  : item.status === "duplicate"
+                                                    ? "สลิปซ้ำ"
+                                                    : item.status === "queued"
+                                                      ? "รอคิว"
+                                                      : "กำลังอ่าน"}
                                         </span>
+                                        {#if item.status === "duplicate" && item.duplicateExpenseId}
+                                            <a
+                                                href={`/expenses/${item.duplicateExpenseId}`}
+                                                class="text-xs font-semibold text-amber-700 underline"
+                                            >
+                                                ดูรายการเดิม
+                                            </a>
+                                        {/if}
                                     </div>
                                     <div class="mt-1 text-xl font-bold text-slate-900 font-display">
                                         {item.amount ? item.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}

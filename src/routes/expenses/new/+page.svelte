@@ -11,10 +11,10 @@
         Sparkles,
     } from "lucide-svelte";
     import { fade, slide } from "svelte/transition";
-    import { getOCRWorker, terminateOCRWorker } from "$lib/stores/ocrStore";
-    import { preprocessImage } from "$lib/utils/imageProcessor";
+    import { terminateOCRWorker } from "$lib/stores/ocrStore";
+    import { extractFromImage, toFormFields } from "$lib/utils/slipClient";
+    import type { SlipExtractResponse } from "$lib/types/slip";
     import {
-        extractExpenseData,
         expenseCategories,
         getTodayLocalDate,
         incomeCategories,
@@ -38,6 +38,9 @@
     let customCategory = "";
     let isCustomCategory = false;
     let highlightedFields: string[] = [];
+    let slipNotice: string | null = null;
+    let duplicateExpenseId: string | null = null;
+    let slipExtractionJson = "";
     let resetHighlightTimer: ReturnType<typeof setTimeout> | null = null;
     let aiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -95,32 +98,40 @@
     }
 
     async function processOCR(file: File) {
+        if (scanning) return;
         scanning = true;
+        slipNotice = null;
+        duplicateExpenseId = null;
 
         try {
-            const worker = await getOCRWorker();
-            const processedImageUrl = await preprocessImage(file);
-            const {
-                data: { text },
-            } = await worker.recognize(processedImageUrl);
-            const extracted = extractExpenseData(text);
+            const extraction = await extractFromImage(file);
+            slipExtractionJson = JSON.stringify(extraction);
+            const fields = toFormFields(extraction);
 
-            if (extracted.amount) amount = extracted.amount;
-            if (extracted.date) paidAt = extracted.date;
-            if (extracted.notes) {
-                notes = extracted.notes;
-                description = extracted.description;
+            if (fields.amount) amount = fields.amount;
+            if (fields.date) paidAt = fields.date;
+            if (fields.notes) {
+                notes = fields.notes;
+                description = fields.description;
             }
 
-            flashHighlights(extracted.highlightedFields);
+            flashHighlights(fields.highlightedFields);
 
-            if (extracted.notes || extracted.description) {
+            if (fields.notes || fields.description) {
                 category = "";
                 isCustomCategory = false;
                 triggerAICategorize();
             }
+
+            if (extraction.duplicate_of) {
+                duplicateExpenseId = extraction.duplicate_of.expense_id;
+                slipNotice = "สลิปนี้เคยถูกบันทึกแล้ว";
+            } else if (!extraction.is_slip && fields.amount == null) {
+                slipNotice = "อ่านสลิปไม่สำเร็จ กรอกเองได้เลย";
+            }
         } catch (error) {
-            console.error("OCR Error:", error);
+            console.error("Slip extraction error:", error);
+            slipNotice = "อ่านสลิปไม่สำเร็จ กรอกเองได้เลย";
         } finally {
             scanning = false;
         }
@@ -253,6 +264,22 @@
                     <p class="text-xs text-slate-500">ระบบจะช่วยเติมข้อมูลจากรูป</p>
                 </div>
             </label>
+
+            <input type="hidden" name="slip_extraction" value={slipExtractionJson} />
+
+            {#if slipNotice}
+                <div
+                    class="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+                    in:slide
+                >
+                    <span>{slipNotice}</span>
+                    {#if duplicateExpenseId}
+                        <a href={`/expenses/${duplicateExpenseId}`} class="shrink-0 font-semibold underline">
+                            ดูรายการเดิม
+                        </a>
+                    {/if}
+                </div>
+            {/if}
 
             {#if previewUrls.length > 0}
                 <div class="mt-3 grid grid-cols-3 gap-2" in:slide>

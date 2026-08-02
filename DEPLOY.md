@@ -24,6 +24,11 @@
         *   ก๊อปปี้ค่าไปใส่ใน Vercel:
             *   `PUBLIC_SUPABASE_URL`
             *   `PUBLIC_SUPABASE_ANON_KEY`
+            *   `DEEPSEEK_API_KEY` (จัดหมวดหมู่ + แปลงข้อความสลิปเป็น JSON)
+        *   สำหรับอ่านสลิปด้วย AI (ดู `docs/OCR_IMPLEMENTATION.md`):
+            *   `SLIP_AI_PROVIDER` (`typhoon` หรือ `openrouter`)
+            *   `TYPHOON_API_KEY` หรือ `OPENROUTER_API_KEY` + `OPENROUTER_MODEL`
+            *   `PUBLIC_SLIP_AI_ENABLED` — ตั้ง `false` ก่อนเพื่อ deploy แบบปิดไว้ (ระบบจะใช้ Tesseract เหมือนเดิม) แล้วค่อยเปลี่ยนเป็น `true`
 
 ## 3. กด Deploy
 *   กดปุ่ม **Deploy** แล้วรอสักครู่

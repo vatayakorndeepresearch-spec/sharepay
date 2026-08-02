@@ -21,3 +21,13 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Eval corpus (downloaded production slips)
+eval/slips/
+
+# Tesseract language data downloaded by the eval harness
+*.traineddata
+
+# Golden labels + QR dump contain real names/memos/transaction refs
+eval/golden.jsonl
+eval/qr-scan.json

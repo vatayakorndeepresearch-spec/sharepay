@@ -12,10 +12,9 @@
         Trash2,
     } from "lucide-svelte";
     import { fade } from "svelte/transition";
-    import { getOCRWorker, terminateOCRWorker } from "$lib/stores/ocrStore";
-    import { preprocessImage } from "$lib/utils/imageProcessor";
+    import { terminateOCRWorker } from "$lib/stores/ocrStore";
+    import { extractFromImage, toFormFields } from "$lib/utils/slipClient";
     import {
-        extractExpenseData,
         expenseCategories,
         incomeCategories,
         aiCategorize,
@@ -30,6 +29,7 @@
     let aiCategorizing = false;
     let previewUrls: string[] = [];
     let highlightedFields: string[] = [];
+    let slipNotice: string | null = null;
     let resetHighlightTimer: ReturnType<typeof setTimeout> | null = null;
     let aiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -103,32 +103,35 @@
     }
 
     async function processOCR(file: File) {
+        if (scanning) return;
         scanning = true;
+        slipNotice = null;
 
         try {
-            const worker = await getOCRWorker();
-            const processedImageUrl = await preprocessImage(file);
-            const {
-                data: { text },
-            } = await worker.recognize(processedImageUrl);
-            const extracted = extractExpenseData(text);
+            const extraction = await extractFromImage(file);
+            const fields = toFormFields(extraction);
 
-            if (extracted.amount) amount = extracted.amount;
-            if (extracted.date) paidAt = extracted.date;
-            if (extracted.notes) {
-                notes = extracted.notes;
-                description = extracted.description;
+            if (fields.amount) amount = fields.amount;
+            if (fields.date) paidAt = fields.date;
+            if (fields.notes) {
+                notes = fields.notes;
+                description = fields.description;
             }
 
-            flashHighlights(extracted.highlightedFields);
+            flashHighlights(fields.highlightedFields);
 
-            if (extracted.notes || extracted.description) {
+            if (fields.notes || fields.description) {
                 category = "";
                 isCustomCategory = false;
                 triggerAICategorize();
             }
+
+            if (!extraction.is_slip && fields.amount == null) {
+                slipNotice = "อ่านสลิปไม่สำเร็จ กรอกเองได้เลย";
+            }
         } catch (error) {
-            console.error("OCR Error:", error);
+            console.error("Slip extraction error:", error);
+            slipNotice = "อ่านสลิปไม่สำเร็จ กรอกเองได้เลย";
         } finally {
             scanning = false;
         }
@@ -259,6 +262,12 @@
                     <p class="text-xs text-slate-500">รูปเดิมยังอยู่จนกว่าจะลบ</p>
                 </div>
             </label>
+
+            {#if slipNotice}
+                <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                    {slipNotice}
+                </div>
+            {/if}
 
             {#if previewUrls.length > 0}
                 <div class="mt-3 grid grid-cols-3 gap-2">
