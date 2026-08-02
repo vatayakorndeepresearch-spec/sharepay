@@ -1,11 +1,21 @@
 import type { PageServerLoad } from './$types';
 
-type ExpenseRow = {
-    amount: number | string;
-    category: string | null;
-    paid_at: string;
-    paid_by: string | null;
-    profiles: { display_name: string | null } | null;
+type StatsPayload = {
+    total: number | string;
+    count: number;
+    earliest: string | null;
+    monthly: Array<{ month: string; value: number | string }>;
+    by_category: Array<{ label: string; value: number | string }>;
+    by_spender: Array<{ label: string; value: number | string; count: number }>;
+};
+
+const EMPTY_STATS: StatsPayload = {
+    total: 0,
+    count: 0,
+    earliest: null,
+    monthly: [],
+    by_category: [],
+    by_spender: []
 };
 
 const RANGE_MONTHS: Record<string, number | null> = {
@@ -25,48 +35,41 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
     const range = rangeParam in RANGE_MONTHS ? rangeParam : '6m';
     const rangeMonths = RANGE_MONTHS[range];
 
-    let expensesQuery = supabase
-        .from('expenses')
-        .select('amount, category, paid_at, paid_by, profiles:paid_by (display_name)')
-        .eq('transaction_type', 'expense');
-
-    if (projectId !== 'all') {
-        expensesQuery = expensesQuery.eq('project_id', projectId);
-    }
+    let rangeStart: Date | null = null;
     if (rangeMonths !== null) {
-        const start = new Date();
-        start.setDate(1);
-        start.setHours(0, 0, 0, 0);
-        start.setMonth(start.getMonth() - (rangeMonths - 1));
-        expensesQuery = expensesQuery.gte('paid_at', start.toISOString());
+        rangeStart = new Date();
+        rangeStart.setDate(1);
+        rangeStart.setHours(0, 0, 0, 0);
+        rangeStart.setMonth(rangeStart.getMonth() - (rangeMonths - 1));
     }
 
     const [
         { data: projects, error: projectsError },
-        { data: expenseRows, error: expensesError }
+        { data: statsData, error: statsError }
     ] = await Promise.all([
         // Filters list every project (including archived ones) so this dropdown
         // matches the one on the expenses list; only the entry forms hide inactive ones.
         supabase.from('projects').select('id, name').order('name'),
-        expensesQuery
+        // Aggregation runs in Postgres so the payload stays flat no matter how many
+        // expenses exist. See supabase/migrations/20260802_stats_aggregate.sql.
+        supabase.rpc('get_expense_stats', {
+            p_project_id: projectId === 'all' ? null : projectId,
+            p_start: rangeStart ? rangeStart.toISOString() : null
+        })
     ]);
 
     if (projectsError) {
         console.error('Error fetching projects:', projectsError);
     }
-    if (expensesError) {
-        console.error('Error fetching expenses for stats:', expensesError);
+    if (statsError) {
+        console.error('Error fetching expense stats:', statsError);
     }
 
-    const rows = ((expenseRows as unknown as ExpenseRow[] | null) || []).map((row) => ({
-        amount: Number(row.amount || 0),
-        category: (row.category || '').trim() || 'ไม่ระบุหมวดหมู่',
-        paidAt: new Date(row.paid_at),
-        spender: row.profiles?.display_name || 'Unknown'
-    }));
+    const stats = (statsData as StatsPayload | null) ?? EMPTY_STATS;
 
-    const totalExpense = rows.reduce((sum, row) => sum + row.amount, 0);
-    const expenseCount = rows.length;
+    const totalExpense = Number(stats.total || 0);
+    const expenseCount = Number(stats.count || 0);
+    const monthlyTotals = new Map(stats.monthly.map((entry) => [entry.month, Number(entry.value || 0)]));
 
     // Monthly buckets: continuous from the earliest expense (or range start) to now,
     // so months with no spending show as zero instead of disappearing.
@@ -74,23 +77,9 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
     const bucketStart = new Date(now.getFullYear(), now.getMonth(), 1);
     if (rangeMonths !== null) {
         bucketStart.setMonth(bucketStart.getMonth() - (rangeMonths - 1));
-    } else if (rows.length > 0) {
-        const earliest = rows.reduce((min, row) => (row.paidAt < min ? row.paidAt : min), rows[0].paidAt);
+    } else if (stats.earliest) {
+        const earliest = new Date(stats.earliest);
         bucketStart.setFullYear(earliest.getFullYear(), earliest.getMonth(), 1);
-    }
-
-    const monthlyTotals = new Map<string, number>();
-    const categoryTotals = new Map<string, number>();
-    const spenderTotals = new Map<string, { amount: number; count: number }>();
-
-    for (const row of rows) {
-        const key = monthKey(row.paidAt);
-        monthlyTotals.set(key, (monthlyTotals.get(key) || 0) + row.amount);
-        categoryTotals.set(row.category, (categoryTotals.get(row.category) || 0) + row.amount);
-        const spender = spenderTotals.get(row.spender) || { amount: 0, count: 0 };
-        spender.amount += row.amount;
-        spender.count += 1;
-        spenderTotals.set(row.spender, spender);
     }
 
     const monthlyExpenses: Array<{ month: string; value: number }> = [];
@@ -118,8 +107,8 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
         b.value - a.value || a.label.localeCompare(b.label, 'th');
 
     // Colors resolve client-side from --chart-N CSS variables so they follow the theme.
-    const categoryBreakdown = [...categoryTotals.entries()]
-        .map(([label, value]) => ({ label, value }))
+    const categoryBreakdown = stats.by_category
+        .map((entry) => ({ label: entry.label, value: Number(entry.value || 0) }))
         .sort(sortByAmountDesc)
         .map((entry, index) => ({
             ...entry,
@@ -127,8 +116,8 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
             colorIndex: index % 7
         }));
 
-    const spenderBreakdown = [...spenderTotals.entries()]
-        .map(([label, { amount, count }]) => ({ label, value: amount, count }))
+    const spenderBreakdown = stats.by_spender
+        .map((entry) => ({ label: entry.label, value: Number(entry.value || 0), count: entry.count }))
         .sort(sortByAmountDesc)
         .map((entry) => ({
             ...entry,
