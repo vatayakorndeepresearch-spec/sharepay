@@ -1,9 +1,5 @@
 import type { PageServerLoad } from './$types';
 
-/** Chart.js cannot read CSS variables, so the palette lives here and is mirrored
- *  by the breakdown list in the page. */
-const CATEGORY_COLORS = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#64748b'];
-
 type StatsSummaryRow = {
     category_labels: string[] | null;
     category_values: Array<number | string> | null;
@@ -42,9 +38,8 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 
     if (statsError) {
         return {
-            categoryData: { labels: [], datasets: [] },
             categoryBreakdown: [],
-            monthlyData: { labels: [], datasets: [] },
+            monthlyExpenses: [],
             previousMonthExpense: 0,
             topSpender: { name: '-', amount: 0 },
             topCategory: { name: '-', amount: 0 },
@@ -67,44 +62,30 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
         total_expense: 0,
         this_month_expense: 0
     };
-    const monthlyLabels = (stats.monthly_months || []).map((month) =>
-        new Date(`${month}T00:00:00`).toLocaleString('th-TH-u-ca-gregory', {
+    const monthlyExpenses = (stats.monthly_months || []).map((month, index) => ({
+        month: new Date(`${month}T00:00:00`).toLocaleString('th-TH-u-ca-gregory', {
             month: 'short',
             year: '2-digit'
-        })
-    );
-    const monthlyValues = (stats.monthly_values || []).map((value) => Number(value || 0));
+        }),
+        value: Number(stats.monthly_values?.[index] || 0)
+    }));
     const categoryLabels = stats.category_labels || [];
     const categoryValues = (stats.category_values || []).map((value) => Number(value || 0));
     const categoryTotal = categoryValues.reduce((sum, value) => sum + value, 0);
 
     // The RPC returns months oldest-first; the last two are "this month" and "last month".
-    const previousMonthExpense = monthlyValues.length > 1 ? monthlyValues[monthlyValues.length - 2] : 0;
+    const previousMonthExpense =
+        monthlyExpenses.length > 1 ? monthlyExpenses[monthlyExpenses.length - 2].value : 0;
 
     return {
-        categoryData: {
-            labels: categoryLabels,
-            datasets: [{
-                data: categoryValues,
-                backgroundColor: CATEGORY_COLORS,
-                borderWidth: 0
-            }]
-        },
+        // Colors resolve client-side from --chart-N CSS variables so they follow the theme.
         categoryBreakdown: categoryLabels.map((label, index) => ({
             label,
             value: categoryValues[index] ?? 0,
             percent: categoryTotal > 0 ? Math.round(((categoryValues[index] ?? 0) / categoryTotal) * 100) : 0,
-            color: CATEGORY_COLORS[index % CATEGORY_COLORS.length]
+            colorIndex: index % 7
         })),
-        monthlyData: {
-            labels: monthlyLabels,
-            datasets: [{
-                label: 'รายจ่ายรายเดือน',
-                data: monthlyValues,
-                backgroundColor: '#6366f1',
-                borderRadius: 8
-            }]
-        },
+        monthlyExpenses,
         previousMonthExpense,
         topSpender: {
             name: stats.top_spender_name || '-',

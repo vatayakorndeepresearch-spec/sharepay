@@ -11,10 +11,21 @@ Return ONLY a JSON object with keys:
 is_slip, bank, direction, amount, fee, currency, date, time, sender{name,account}, receiver{name,account}, memo, trans_ref, confidence.
 
 Rules:
-- bank is one of: SCB, KBANK, KKP, BBL, KTB, BAY, TTB, GSB, OTHER, UNKNOWN.
+- bank is one of: SCB, KBANK, KKP, BBL, KTB, BAY, TTB, GSB, OTHER, UNKNOWN. It is the bank whose app
+  produced the slip (the sender's app), not the receiver's bank.
+  Cues: "K+"/"K PLUS"/"ธ.กสิกรไทย" as sender = KBANK. "SCB"/"ไทยพาณิชย์" = SCB.
+  "KKP Better"/"เกียรตินาคินภัทร" = KKP. "ทิสโก้" (TISCO) = OTHER.
 - direction is one of: transfer_out, transfer_in, bill_payment, topup, unknown.
+  "โอนเงิน"/"โอนเงินสำเร็จ" = transfer_out. "จ่ายบิลสำเร็จ" or a receiver with "Biller ID" = bill_payment.
 - Thai labels: "จำนวนเงิน"/"จำนวน" = amount (THB). "ค่าธรรมเนียม" = fee. "บันทึกช่วยจำ" = memo.
-  "จาก" = sender. "ไปยัง"/"ถึง" = receiver. "รหัสอ้างอิง"/"เลขที่รายการ" = trans_ref.
+  "จาก" = sender. "ไปยัง"/"ถึง" = receiver. "รหัสอ้างอิง"/"เลขที่รายการ" = trans_ref
+  (alphanumeric refs are valid; "เลขที่อ้างอิง 1/2/3" and "หมายเลขการชำระเงิน" on bill slips are
+  biller references — use them for trans_ref only when no รหัสอ้างอิง/เลขที่รายการ exists).
+- Layout notes: some apps (e.g. KKP Better) print the amount only in the coloured header, like
+  "โอนเงิน 1,200.00 THB" — that is the amount. A short free-text line at the very bottom of the slip
+  with no label (often next to a chat/note icon) is the memo. For bill payments the receiver is the
+  biller/shop name and receiver.account may be the Biller ID.
+- Accounts are masked ("xxx-x-x3489-x", "xxxxxx6038"); copy them verbatim.
 - Dates are Thai Buddhist Era: subtract 543 to get Gregorian year. Short years: "69" or "2569" → 2026.
   Thai month abbreviations: ม.ค.=01 ก.พ.=02 มี.ค.=03 เม.ย.=04 พ.ค.=05 มิ.ย.=06 ก.ค.=07 ส.ค.=08 ก.ย.=09 ต.ค.=10 พ.ย.=11 ธ.ค.=12.
   Output date as YYYY-MM-DD (Gregorian). Output time as HH:MM (24h) or null.

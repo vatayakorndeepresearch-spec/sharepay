@@ -1,6 +1,6 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import { onDestroy, onMount } from "svelte";
+    import { PieChart, BarChart } from "layerchart";
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import EmptyState from "$lib/components/EmptyState.svelte";
     import {
@@ -15,70 +15,12 @@
 
     export let data;
 
-    let pieCanvas: HTMLCanvasElement;
-    let barCanvas: HTMLCanvasElement;
-    let pieChart: any;
-    let barChart: any;
-    let renderToken = 0;
+    // Fixed slot order — colors follow the category, resolved per-theme in app.css.
+    const CHART_COLORS = [1, 2, 3, 4, 5, 6, 7].map((n) => `var(--chart-${n})`);
 
     function handleProjectChange(event: Event) {
         const projectId = (event.currentTarget as HTMLSelectElement).value;
         goto(projectId === "all" ? "/stats" : `?projectId=${projectId}`);
-    }
-
-    async function renderCharts() {
-        const token = ++renderToken;
-        const { default: Chart } = await import("chart.js/auto");
-        // A newer render started while the chart module was loading — drop this one.
-        if (token !== renderToken) return;
-
-        if (pieCanvas && data.categoryData?.labels?.length) {
-            pieChart?.destroy();
-            pieChart = new Chart(pieCanvas, {
-                type: "doughnut",
-                data: data.categoryData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: "72%",
-                    plugins: { legend: { display: false } },
-                },
-            });
-        }
-
-        if (barCanvas && data.monthlyData?.labels?.length) {
-            barChart?.destroy();
-            barChart = new Chart(barCanvas, {
-                type: "bar",
-                data: data.monthlyData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            border: { display: false },
-                            grid: { color: "rgba(148,163,184,0.2)" },
-                            ticks: { font: { family: "Inter", size: 10 }, color: "#94a3b8" },
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: {
-                                font: { family: "Inter", size: 10, weight: 600 },
-                                color: "#94a3b8",
-                            },
-                        },
-                    },
-                },
-            });
-        }
-    }
-
-    // Depend on `data` explicitly — bind:this only fires on mount, so without this the
-    // charts keep showing the previous project after switching the filter.
-    $: if (data && (pieCanvas || barCanvas)) {
-        renderCharts();
     }
 
     $: monthDelta =
@@ -87,15 +29,6 @@
                   ((data.thisMonthExpense - data.previousMonthExpense) / data.previousMonthExpense) * 100
               )
             : null;
-
-    onMount(() => {
-        renderCharts();
-    });
-
-    onDestroy(() => {
-        pieChart?.destroy();
-        barChart?.destroy();
-    });
 </script>
 
 <div class="page-shell">
@@ -165,7 +98,7 @@
         </div>
     </section>
 
-    {#if !data.categoryData.labels.length}
+    {#if !data.categoryBreakdown.length}
         <EmptyState
             icon={ChartBar}
             title="ยังไม่มีข้อมูลพอ"
@@ -177,7 +110,15 @@
         <section class="surface-card p-4">
             <h2 class="mb-3 text-sm font-semibold text-text">แบ่งตามหมวดหมู่</h2>
             <div class="relative h-52">
-                <canvas bind:this={pieCanvas}></canvas>
+                <PieChart
+                    data={data.categoryBreakdown}
+                    key="label"
+                    value="value"
+                    cRange={CHART_COLORS}
+                    innerRadius={-24}
+                    cornerRadius={4}
+                    padAngle={0.02}
+                />
             </div>
 
             <div class="mt-4 space-y-1.5">
@@ -186,7 +127,10 @@
                         href={`/expenses?q=${encodeURIComponent(item.label)}`}
                         class="flex items-center gap-2.5 rounded-lg px-1 py-1.5 transition-colors hover:bg-surface-muted"
                     >
-                        <span class="h-2.5 w-2.5 shrink-0 rounded-full" style={`background:${item.color}`}></span>
+                        <span
+                            class="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={`background:var(--chart-${item.colorIndex + 1})`}
+                        ></span>
                         <span class="min-w-0 flex-1 truncate text-sm text-soft">{item.label}</span>
                         <span class="shrink-0 text-xs text-muted">{item.percent}%</span>
                         <span class="w-24 shrink-0 text-right text-sm font-semibold text-text">
@@ -200,7 +144,25 @@
         <section class="surface-card p-4">
             <h2 class="mb-3 text-sm font-semibold text-text">แนวโน้มรายเดือน</h2>
             <div class="relative h-56">
-                <canvas bind:this={barCanvas}></canvas>
+                <BarChart
+                    data={data.monthlyExpenses}
+                    x="month"
+                    y="value"
+                    bandPadding={0.3}
+                    series={[
+                        {
+                            key: "value",
+                            label: "รายจ่าย",
+                            color: "var(--chart-1)",
+                            props: { radius: 4, rounded: "top", strokeWidth: 0 },
+                        },
+                    ]}
+                    props={{
+                        xAxis: { tickLabelProps: { class: "text-[10px] fill-muted font-medium" } },
+                        yAxis: { tickLabelProps: { class: "text-[10px] fill-muted" } },
+                        grid: { class: "stroke-[var(--chart-grid)]" },
+                    }}
+                />
             </div>
         </section>
     {/if}

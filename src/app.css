@@ -30,6 +30,17 @@
     --danger-soft: 255 241 242;
     --danger-on-soft: 190 18 60;
 
+    /* Chart series (hex, not RGB triples — read directly as SVG fills).
+       CVD-validated per mode against the surface color; keep order fixed. */
+    --chart-1: #2a78d6;
+    --chart-2: #eb6834;
+    --chart-3: #1baf7a;
+    --chart-4: #eda100;
+    --chart-5: #e87ba4;
+    --chart-6: #008300;
+    --chart-7: #4a3aa7;
+    --chart-grid: rgb(148 163 184 / 0.2);
+
     /* Layout — safe-area insets are live values because the app runs
        fullscreen under the Dynamic Island with viewport-fit=cover. */
     --nav-h: 68px;
@@ -65,6 +76,15 @@
     --danger: 244 63 94;
     --danger-soft: 62 14 24;
     --danger-on-soft: 253 164 175;
+
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-6: #008300;
+    --chart-7: #9085e9;
+    --chart-grid: rgb(148 163 184 / 0.15);
   }
 
   body {
