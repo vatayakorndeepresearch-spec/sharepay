@@ -479,10 +479,10 @@
         {/if}
 
         {#if previewUrls.length > 0}
-            <div class="mt-3 grid grid-cols-3 gap-2" in:slide>
+            <div class="mt-3 grid grid-cols-2 gap-2" in:slide>
                 {#each previewUrls as url, index (url)}
                     <div class="overflow-hidden rounded-lg border border-border bg-surface-muted">
-                        <img src={url} alt={`สลิปที่เพิ่งเลือก ${index + 1}`} class="h-20 w-full object-cover" />
+                        <img src={url} alt={`สลิปที่เพิ่งเลือก ${index + 1}`} class="w-full object-contain" />
                     </div>
                 {/each}
             </div>
@@ -491,10 +491,10 @@
         {#if attachments.length > 0}
             <div class="mt-4">
                 <div class="mb-2 text-xs font-medium text-muted">รูปที่มีอยู่แล้ว</div>
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-2 gap-2">
                     {#each attachments as attachment (attachment.id)}
                         <div class="relative overflow-hidden rounded-lg border border-border bg-surface-muted">
-                            <img src={attachment.file_url} alt="หลักฐานที่แนบไว้" class="h-20 w-full object-cover" />
+                            <img src={attachment.file_url} alt="หลักฐานที่แนบไว้" class="w-full object-contain" />
                             <button
                                 type="submit"
                                 form={attachmentDeleteFormId}
