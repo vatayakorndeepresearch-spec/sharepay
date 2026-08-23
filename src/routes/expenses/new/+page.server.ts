@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { resolveCategory } from '$lib/utils/expenseForm';
 import { recordSlipExtraction } from '$lib/server/slipExtractions';
+import { logExpenseActivity, snapshotExpense } from '$lib/server/expenseActivity';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const [{ data: projects }, { data: profiles }, { currentProfileId, currentUser }] =
@@ -20,7 +21,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
 };
 
 export const actions: Actions = {
-    save: async ({ request, locals: { supabase } }) => {
+    save: async ({ request, locals: { supabase, user } }) => {
         const formData = await request.formData();
 
         const projectId = formData.get('project_id') as string;
@@ -103,6 +104,15 @@ export const actions: Actions = {
         if (insertError) {
             console.error('Insert Error:', insertError);
             return fail(500, { error: 'เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่อีกครั้ง' });
+        }
+
+        if (expense) {
+            await logExpenseActivity(supabase, {
+                expenseId: expense.id,
+                action: 'create',
+                user,
+                snapshot: await snapshotExpense(supabase, expense.id)
+            });
         }
 
         // Audit the slip extraction that filled this form (never blocks the save)

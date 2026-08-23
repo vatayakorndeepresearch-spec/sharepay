@@ -40,3 +40,28 @@ export const formatMonth = (month: string) => {
         year: 'numeric'
     });
 };
+
+/** Timestamp -> `เมื่อสักครู่` / `12 นาทีที่แล้ว` / `3 ชม.ที่แล้ว` / `2 ก.ย.` */
+export const formatRelativeTime = (timestamp: string, now = new Date()) => {
+    if (!timestamp) return '';
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
+    if (diffMinutes < 1) return 'เมื่อสักครู่';
+    if (diffMinutes < 60) return `${diffMinutes} นาทีที่แล้ว`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours} ชม.ที่แล้ว`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'เมื่อวาน';
+    if (diffDays < 7) return `${diffDays} วันที่แล้ว`;
+
+    return date.toLocaleDateString(LOCALE, {
+        day: 'numeric',
+        month: 'short',
+        ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' })
+    });
+};

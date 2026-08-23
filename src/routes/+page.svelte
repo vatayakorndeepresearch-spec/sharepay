@@ -3,11 +3,13 @@
     import { formatCurrency } from "$lib/utils/formatCurrency";
     import EmptyState from "$lib/components/EmptyState.svelte";
     import ExpenseRow from "$lib/components/ExpenseRow.svelte";
+    import ActivityRow from "$lib/components/ActivityRow.svelte";
     import {
         ArrowRight,
         Briefcase,
         CheckCircle2,
         Clock3,
+        History,
         Link as LinkIcon,
         Receipt,
         TrendingDown,
@@ -172,6 +174,24 @@
             </div>
         {/if}
     </section>
+
+    {#if data.activities.length > 0}
+        <section class="space-y-2">
+            <div class="flex items-center justify-between px-1">
+                <h2 class="flex items-center gap-1.5 text-base font-bold text-text">
+                    <History size={15} class="text-soft" />
+                    ความเคลื่อนไหวล่าสุด
+                </h2>
+                <a href="/activity" class="text-sm font-medium text-accent">ดูทั้งหมด</a>
+            </div>
+
+            <div class="surface-card divide-y divide-border overflow-hidden">
+                {#each data.activities as activity (activity.id)}
+                    <ActivityRow {activity} />
+                {/each}
+            </div>
+        </section>
+    {/if}
 
     <section class="space-y-2">
         <div class="flex items-center justify-between px-1">

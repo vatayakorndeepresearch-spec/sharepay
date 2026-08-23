@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { resolveCategory } from '$lib/utils/expenseForm';
+import { logExpenseActivity, snapshotExpense } from '$lib/server/expenseActivity';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, parent }) => {
     const { id } = params;
@@ -52,7 +53,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
 };
 
 export const actions: Actions = {
-    update: async ({ request, params, locals: { supabase } }) => {
+    update: async ({ request, params, locals: { supabase, user } }) => {
         const { id } = params;
         const formData = await request.formData();
 
@@ -158,6 +159,13 @@ export const actions: Actions = {
             console.error('Update error:', updateError);
             return fail(500, { error: 'เกิดข้อผิดพลาดในการแก้ไข กรุณาลองใหม่อีกครั้ง' });
         }
+
+        await logExpenseActivity(supabase, {
+            expenseId: id,
+            action: 'update',
+            user,
+            snapshot: await snapshotExpense(supabase, id)
+        });
 
         // Insert Attachments
         if (uploadedUrls.length > 0) {

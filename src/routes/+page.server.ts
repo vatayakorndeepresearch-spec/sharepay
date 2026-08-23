@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { ACTIVITY_SELECT, type ActivityRow } from '$lib/server/expenseActivity';
 
 type SettlementState = 'you_owe' | 'owed_to_you' | 'clear' | 'unknown';
 type SettlementSummaryRow = {
@@ -31,6 +32,11 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
         .order('paid_at', { ascending: false })
         .limit(8);
     const projectSummaryPromise = supabase.rpc('get_project_financial_summary');
+    const activityPromise = supabase
+        .from('expense_activity')
+        .select(ACTIVITY_SELECT)
+        .order('created_at', { ascending: false })
+        .limit(5);
 
     const { currentProfileId, currentUser } = await parentPromise;
     const settlementPromise = currentProfileId
@@ -48,11 +54,13 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
     const [
         { data: expenses, error: expensesError },
         { data: projectSummaryRows, error: projectSummaryError },
-        { data: settlementRows, error: settlementError }
+        { data: settlementRows, error: settlementError },
+        { data: activityRows, error: activityError }
     ] = await Promise.all([
         recentExpensesPromise,
         projectSummaryPromise,
-        settlementPromise
+        settlementPromise,
+        activityPromise
     ]);
 
     if (expensesError) {
@@ -63,6 +71,9 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
     }
     if (settlementError) {
         console.error('Error fetching settlement summary:', settlementError);
+    }
+    if (activityError) {
+        console.error('Error fetching recent activity:', activityError);
     }
 
     const projectSummary: Record<string, { name: string; income: number; expense: number }> = {};
@@ -125,6 +136,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
     return {
         currentUser,
         expenses: expenses || [],
+        activities: (activityRows || []) as ActivityRow[],
         projectSummary,
         settlementSummary
     };

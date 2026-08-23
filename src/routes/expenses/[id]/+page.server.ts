@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { logExpenseActivity, snapshotExpense } from '$lib/server/expenseActivity';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, parent }) => {
     const { id } = params;
@@ -47,7 +48,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, paren
 };
 
 export const actions: Actions = {
-    reimburse: async ({ request, params, locals: { supabase } }) => {
+    reimburse: async ({ request, params, locals: { supabase, user } }) => {
         const { id } = params;
         const formData = await request.formData();
         const reimbursedBy = formData.get('reimbursed_by') as string;
@@ -85,6 +86,8 @@ export const actions: Actions = {
             reimbursementProofUrl = publicUrl;
         }
 
+        const snapshot = await snapshotExpense(supabase, id);
+
         const { error: updateError } = await supabase
             .from('expenses')
             .update({
@@ -100,11 +103,14 @@ export const actions: Actions = {
             return fail(500, { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
         }
 
+        await logExpenseActivity(supabase, { expenseId: id, action: 'reimburse', user, snapshot });
+
         return { success: true };
     },
 
-    unreimburse: async ({ params, locals: { supabase } }) => {
+    unreimburse: async ({ params, locals: { supabase, user } }) => {
         const { id } = params;
+        const snapshot = await snapshotExpense(supabase, id);
 
         const { error: updateError } = await supabase
             .from('expenses')
@@ -121,11 +127,14 @@ export const actions: Actions = {
             return fail(500, { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
         }
 
+        await logExpenseActivity(supabase, { expenseId: id, action: 'unreimburse', user, snapshot });
+
         return { success: true };
     },
 
-    delete: async ({ params, locals: { supabase } }) => {
+    delete: async ({ params, locals: { supabase, user } }) => {
         const { id } = params;
+        const snapshot = await snapshotExpense(supabase, id);
 
         const { error: deleteError } = await supabase
             .from('expenses')
@@ -136,6 +145,9 @@ export const actions: Actions = {
             console.error('Delete error:', deleteError);
             return fail(500, { error: 'เกิดข้อผิดพลาดในการลบ กรุณาลองใหม่อีกครั้ง' });
         }
+
+        // expense_id is already null by now (ON DELETE SET NULL); the snapshot carries the row.
+        await logExpenseActivity(supabase, { expenseId: null, action: 'delete', user, snapshot });
 
         throw redirect(303, '/expenses');
     }

@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { resolveCategory } from '$lib/utils/expenseForm';
+import { logExpenseActivity, snapshotExpense } from '$lib/server/expenseActivity';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => {
     const [{ data: projects }, { data: profiles }, { currentProfileId, currentUser }] =
@@ -19,7 +20,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, parent }) => 
 };
 
 export const actions: Actions = {
-    batchSave: async ({ request, locals: { supabase } }) => {
+    batchSave: async ({ request, locals: { supabase, user } }) => {
         const formData = await request.formData();
         const itemCount = parseInt(formData.get('item_count') as string || '0');
 
@@ -117,6 +118,13 @@ export const actions: Actions = {
                         file_type: 'image'
                     });
                 }
+
+                await logExpenseActivity(supabase, {
+                    expenseId: expense.id,
+                    action: 'create',
+                    user,
+                    snapshot: await snapshotExpense(supabase, expense.id)
+                });
 
                 successIds.push(expense.id);
             } catch (err) {
