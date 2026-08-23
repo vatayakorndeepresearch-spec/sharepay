@@ -721,9 +721,11 @@
             <input id="bulk-date" type="date" class="field-input" bind:value={bulkDate} />
         </div>
 
-        <button type="button" class="btn-primary w-full" on:click={applyToAll}>
-            ใช้กับ {items.length} รายการ
-        </button>
+        <div class="sheet-footer">
+            <button type="button" class="btn-primary w-full" on:click={applyToAll}>
+                ใช้กับ {items.length} รายการ
+            </button>
+        </div>
     </div>
 </Sheet>
 

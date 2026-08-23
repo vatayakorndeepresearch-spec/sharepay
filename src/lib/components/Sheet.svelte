@@ -70,11 +70,23 @@
     }
 
     onDestroy(() => lockScroll(false));
+
+    // Ancestors such as .app-main create stacking contexts (view-transition-name),
+    // which would trap the sheet underneath the bottom nav. Render it on <body>.
+    function portal(node: HTMLElement) {
+        document.body.appendChild(node);
+        return {
+            destroy() {
+                node.remove();
+            },
+        };
+    }
 </script>
 
 <svelte:window on:keydown={onKeydown} />
 
 {#if open}
+  <div use:portal>
     <button
         type="button"
         class="fixed inset-0 z-[60] bg-slate-950/40"
@@ -112,4 +124,5 @@
 
         <slot />
     </div>
+  </div>
 {/if}

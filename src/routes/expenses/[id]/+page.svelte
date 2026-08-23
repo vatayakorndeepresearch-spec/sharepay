@@ -319,14 +319,16 @@
             </div>
         {/if}
 
-        <button type="submit" disabled={loading} class="btn-success">
-            {#if loading}
-                <Loader2 size={16} class="animate-spin" />
-                กำลังบันทึก...
-            {:else}
-                ยืนยัน
-            {/if}
-        </button>
+        <div class="sheet-footer">
+            <button type="submit" disabled={loading} class="btn-success w-full">
+                {#if loading}
+                    <Loader2 size={16} class="animate-spin" />
+                    กำลังบันทึก...
+                {:else}
+                    ยืนยันการเคลียร์ยอด
+                {/if}
+            </button>
+        </div>
     </form>
 </Sheet>
 

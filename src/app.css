@@ -583,13 +583,23 @@
   .sheet-panel {
     @apply fixed inset-x-0 bottom-0 z-[70] rounded-t-[28px] border-t border-border bg-surface pt-4;
     box-shadow: var(--shadow-2);
+    --sheet-pad-bottom: calc(var(--safe-bottom) + 24px);
     padding-left: calc(1.25rem + var(--safe-left));
     padding-right: calc(1.25rem + var(--safe-right));
-    padding-bottom: calc(var(--safe-bottom) + 24px);
+    padding-bottom: var(--sheet-pad-bottom);
     /* Never taller than the space between the island and the home indicator. */
     max-height: calc(100dvh - var(--safe-top) - 1.5rem);
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+
+  /* Primary actions stay reachable while the sheet body scrolls. */
+  .sheet-footer {
+    position: sticky;
+    bottom: var(--sheet-pad-bottom);
+    margin-top: 16px;
+    padding-top: 12px;
+    background: linear-gradient(to top, rgb(var(--surface)) 72%, rgb(var(--surface) / 0));
   }
 
   .sheet-panel::before {
